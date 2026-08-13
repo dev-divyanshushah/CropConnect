@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CropConnect – Smart Irrigation Dashboard</title>
+  <meta name="description" content="Smart Irrigation System Dashboard – Monitor soil moisture, irrigation status, and weather for 4 field sectors." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- HEADER                                                  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-icon">🌾</div>
+      <div class="header-title">
+        <h1>CropConnect</h1>
+        <p>Smart Irrigation Dashboard</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <!-- MOCK badge – shown only when MOCK_MODE=true on backend -->
+      <span id="mock-badge" class="mock-badge">🧪 MOCK MODE</span>
+      <!-- Live connection indicator -->
+      <div class="connection-status">
+        <div id="connection-dot" class="connection-dot"></div>
+        <span id="connection-text">Connecting…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- MAIN CONTENT                                            -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <main class="main">
+
+    <!-- ── Weather Strip ──────────────────────────────────── -->
+    <div id="weather-strip" class="weather-strip">
+      <div class="weather-left">
+        <div id="weather-icon" class="weather-icon">⏳</div>
+        <div>
+          <div id="weather-message" class="weather-message">Loading weather…</div>
+          <div id="weather-sub"     class="weather-sub">Checking forecast</div>
+        </div>
+      </div>
+      <div class="weather-right">
+        <div class="weather-stat">
+          <div id="weather-temp" class="weather-stat-value">—</div>
+          <div class="weather-stat-label">Temperature</div>
+        </div>
+        <div class="weather-stat">
+          <div id="weather-desc" class="weather-stat-value" style="font-size:0.88rem;">—</div>
+          <div class="weather-stat-label">Condition</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Legend ─────────────────────────────────────────── -->
+    <div class="legend">
+      <span class="legend-title">Guide:</span>
+      <div class="legend-item">
+        <div class="legend-dot green"></div>
+        <span>Soil moisture is <strong>OK</strong></span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot red"></div>
+        <span>Soil is <strong>DRY</strong> – needs water</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot blue"></div>
+        <span><strong>Irrigation ON</strong> – water flowing</span>
+      </div>
+      <div style="margin-left:auto; font-size:0.78rem; color:var(--text-muted);">
+        Threshold: <strong id="threshold-display">—</strong> moisture level
+      </div>
+    </div>
+
+    <!-- ── Section: Sensor Nodes ──────────────────────────── -->
+    <div class="section-title">📡 Field Sectors – Soil Moisture</div>
+
+    <div class="nodes-grid">
+
+      <!-- Node 1 -->
+      <div id="node-card-1" class="node-card state-nodata">
+        <div class="node-header">
+          <div>
+            <div class="node-name">🌱 Sector 1 (Node 1)</div>
+            <div class="node-master">Master 1 · ESP8266</div>
+          </div>
+          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+        </div>
+
+        <div class="moisture-section">
+          <div class="moisture-row">
+            <div>
+              <div class="moisture-label">Soil Moisture</div>
+              <div>
+                <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                <span class="moisture-unit"> %</span>
+              </div>
+            </div>
+          </div>
+          <div class="moisture-bar-track">
+            <div class="moisture-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="irrigation-row">
+          <div class="irrigation-label">
+            <span class="irrigation-icon">💧</span>
+            Irrigation valve
+          </div>
+          <div class="irrigation-value irr-off">OFF</div>
+        </div>
+
+        <div class="last-updated">No data received yet</div>
+      </div>
+
+      <!-- Node 2 -->
+      <div id="node-card-2" class="node-card state-nodata">
+        <div class="node-header">
+          <div>
+            <div class="node-name">🌱 Sector 2 (Node 2)</div>
+            <div class="node-master">Master 1 · ESP8266</div>
+          </div>
+          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+        </div>
+
+        <div class="moisture-section">
+          <div class="moisture-row">
+            <div>
+              <div class="moisture-label">Soil Moisture</div>
+              <div>
+                <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                <span class="moisture-unit"> %</span>
+              </div>
+            </div>
+          </div>
+          <div class="moisture-bar-track">
+            <div class="moisture-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="irrigation-row">
+          <div class="irrigation-label">
+            <span class="irrigation-icon">💧</span>
+            Irrigation valve
+          </div>
+          <div class="irrigation-value irr-off">OFF</div>
+        </div>
+
+        <div class="last-updated">No data received yet</div>
+      </div>
+
+      <!-- Node 3 -->
+      <div id="node-card-3" class="node-card state-nodata">
+        <div class="node-header">
+          <div>
+            <div class="node-name">🌱 Sector 3 (Node 3)</div>
+            <div class="node-master">Master 2 · ESP8266</div>
+          </div>
+          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+        </div>
+
+        <div class="moisture-section">
+          <div class="moisture-row">
+            <div>
+              <div class="moisture-label">Soil Moisture</div>
+              <div>
+                <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                <span class="moisture-unit"> %</span>
+              </div>
+            </div>
+          </div>
+          <div class="moisture-bar-track">
+            <div class="moisture-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="irrigation-row">
+          <div class="irrigation-label">
+            <span class="irrigation-icon">💧</span>
+            Irrigation valve
+          </div>
+          <div class="irrigation-value irr-off">OFF</div>
+        </div>
+
+        <div class="last-updated">No data received yet</div>
+      </div>
+
+      <!-- Node 4 -->
+      <div id="node-card-4" class="node-card state-nodata">
+        <div class="node-header">
+          <div>
+            <div class="node-name">🌱 Sector 4 (Node 4)</div>
+            <div class="node-master">Master 2 · ESP8266</div>
+          </div>
+          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+        </div>
+
+        <div class="moisture-section">
+          <div class="moisture-row">
+            <div>
+              <div class="moisture-label">Soil Moisture</div>
+              <div>
+                <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                <span class="moisture-unit"> %</span>
+              </div>
+            </div>
+          </div>
+          <div class="moisture-bar-track">
+            <div class="moisture-bar-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="irrigation-row">
+          <div class="irrigation-label">
+            <span class="irrigation-icon">💧</span>
+            Irrigation valve
+          </div>
+          <div class="irrigation-value irr-off">OFF</div>
+        </div>
+
+        <div class="last-updated">No data received yet</div>
+      </div>
+
+    </div><!-- /nodes-grid -->
+
+    <!-- ── Farm Settings Panel ────────────────────────────── -->
+    <div class="settings-panel">
+      <div class="settings-header" onclick="toggleSettings()" id="settings-header" role="button" aria-expanded="false">
+        <div class="settings-title">
+          ⚙️ Farm Settings
+        </div>
+        <span id="settings-toggle-icon" class="settings-toggle-icon">▼</span>
+      </div>
+
+      <div id="settings-body" class="settings-body">
+        <div class="settings-grid">
+
+          <div class="settings-field">
+            <label for="setting-cropType">Crop Type</label>
+            <select id="setting-cropType">
+              <option value="Wheat">Wheat</option>
+              <option value="Rice">Rice</option>
+              <option value="Maize">Maize / Corn</option>
+              <option value="Sugarcane">Sugarcane</option>
+              <option value="Cotton">Cotton</option>
+              <option value="Soybean">Soybean</option>
+              <option value="Potato">Potato</option>
+              <option value="Tomato">Tomato</option>
+              <option value="Onion">Onion</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="settings-field">
+            <label for="setting-soilType">Soil Type</label>
+            <select id="setting-soilType">
+              <option value="Loamy">Loamy</option>
+              <option value="Sandy">Sandy</option>
+              <option value="Clay">Clay</option>
+              <option value="Silty">Silty</option>
+              <option value="Peaty">Peaty</option>
+              <option value="Chalky">Chalky</option>
+            </select>
+          </div>
+
+          <div class="settings-field">
+            <label for="setting-growthStage">Growth Stage</label>
+            <select id="setting-growthStage">
+              <option value="Germination">Germination</option>
+              <option value="Seedling">Seedling</option>
+              <option value="Vegetative">Vegetative</option>
+              <option value="Flowering">Flowering</option>
+              <option value="Fruiting">Fruiting / Grain Fill</option>
+              <option value="Maturity">Maturity / Harvest</option>
+            </select>
+          </div>
+
+          <div class="settings-field">
+            <label for="setting-city">City</label>
+            <input id="setting-city" type="text" placeholder="e.g. Delhi" value="Delhi" />
+          </div>
+
+          <div class="settings-field">
+            <label for="setting-state">State</label>
+            <input id="setting-state" type="text" placeholder="e.g. Delhi" value="Delhi" />
+          </div>
+
+        </div>
+
+        <button class="settings-save-btn" onclick="saveSettings()" id="save-settings-btn">
+          💾 Save Settings
+        </button>
+        <span id="settings-save-msg" class="settings-save-msg">✅ Saved!</span>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- FOOTER                                                  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <footer class="footer">
+    CropConnect Smart Irrigation System &nbsp;·&nbsp; Data refreshes every 10 seconds &nbsp;·&nbsp; 4 Nodes across 2 ESP8266 Masters
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

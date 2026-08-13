@@ -1,0 +1,596 @@
+/* ═══════════════════════════════════════════════════════════════
+   CropConnect Smart Irrigation Dashboard – Stylesheet
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Root Variables (Color System) ──────────────────────────── */
+:root {
+  --bg-main: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-card-hover: #1f2335;
+  --border: #2a2d3e;
+  --text-primary: #eef0f8;
+  --text-secondary: #8a8fa8;
+  --text-muted: #555b72;
+
+  /* Status Colors */
+  --green: #22c55e;
+  --green-bg: rgba(34, 197, 94, 0.1);
+  --green-border: rgba(34, 197, 94, 0.3);
+
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.1);
+  --red-border: rgba(239, 68, 68, 0.3);
+
+  --blue: #3b82f6;
+  --blue-bg: rgba(59, 130, 246, 0.1);
+  --blue-border: rgba(59, 130, 246, 0.3);
+
+  --yellow: #f59e0b;
+  --yellow-bg: rgba(245, 158, 11, 0.1);
+  --yellow-border: rgba(245, 158, 11, 0.3);
+
+  --gray-bg: rgba(138, 143, 168, 0.1);
+  --gray-border: rgba(138, 143, 168, 0.3);
+
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 4px 24px rgba(0,0,0,0.35);
+}
+
+/* ── Base Reset ─────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html { font-size: 16px; scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--bg-main);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(135deg, #1a2e1a 0%, #1a1d27 50%, #0f2040 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 20px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.logo-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+}
+
+.header-title h1 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-primary);
+}
+
+.header-title p {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
+.connection-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: background 0.3s;
+}
+
+.connection-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.connection-dot.error     { background: var(--red); }
+
+.mock-badge {
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-border);
+  color: var(--yellow);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 999px;
+  display: none;
+}
+
+.mock-badge.visible { display: inline-block; }
+
+/* ── Main Layout ────────────────────────────────────────────── */
+.main {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px 24px;
+}
+
+/* ── Weather Strip ──────────────────────────────────────────── */
+.weather-strip {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 24px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  transition: border-color 0.4s;
+}
+
+.weather-strip.rain {
+  border-color: var(--blue-border);
+  background: linear-gradient(135deg, var(--blue-bg), var(--bg-card));
+}
+
+.weather-strip.clear {
+  border-color: var(--green-border);
+  background: linear-gradient(135deg, var(--green-bg), var(--bg-card));
+}
+
+.weather-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.weather-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.weather-message {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.weather-sub {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.weather-right {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.weather-stat {
+  text-align: center;
+}
+
+.weather-stat-value {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.weather-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── System Alert Banner ────────────────────────────────────── */
+.alert-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 20px;
+}
+
+.alert-banner.visible { display: flex; }
+.alert-banner.info  { background: var(--blue-bg); border: 1px solid var(--blue-border); color: #93c5fd; }
+.alert-banner.warn  { background: var(--yellow-bg); border: 1px solid var(--yellow-border); color: #fcd34d; }
+
+/* ── Section Title ──────────────────────────────────────────── */
+.section-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* ── Node Cards Grid ────────────────────────────────────────── */
+.nodes-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+/* ── Single Node Card ───────────────────────────────────────── */
+.node-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 20px 18px;
+  transition: border-color 0.35s, background 0.35s, transform 0.2s, box-shadow 0.2s;
+  cursor: default;
+}
+
+.node-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+/* Card states */
+.node-card.state-ok  { border-color: var(--green-border); }
+.node-card.state-dry { border-color: var(--red-border); }
+.node-card.state-irrigating {
+  border-color: var(--blue-border);
+  background: linear-gradient(160deg, rgba(59,130,246,0.07), var(--bg-card));
+}
+.node-card.state-nodata { border-color: var(--gray-border); }
+
+/* Card Header */
+.node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.node-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.node-master {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.node-status-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.05em;
+}
+
+.badge-ok     { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.badge-dry    { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border);   }
+.badge-nodata { background: var(--gray-bg);  color: var(--text-secondary); border: 1px solid var(--gray-border); }
+
+/* Moisture Gauge */
+.moisture-section {
+  margin-bottom: 16px;
+}
+
+.moisture-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.moisture-value {
+  font-size: 2.6rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -1px;
+  transition: color 0.3s;
+}
+
+.moisture-unit {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.moisture-label {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+/* Progress bar */
+.moisture-bar-track {
+  width: 100%;
+  height: 10px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.moisture-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.4s;
+  background: var(--green);
+}
+
+.moisture-bar-fill.dry        { background: var(--red); }
+.moisture-bar-fill.irrigating { background: var(--blue); }
+
+/* Irrigation Row */
+.irrigation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  margin-top: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  transition: background 0.3s, border-color 0.3s;
+}
+
+.irrigation-row.active {
+  background: var(--blue-bg);
+  border-color: var(--blue-border);
+}
+
+.irrigation-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.irrigation-icon {
+  font-size: 1rem;
+}
+
+.irrigation-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.irr-on  { color: var(--blue); }
+.irr-off { color: var(--text-muted); }
+
+/* Last updated */
+.last-updated {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 10px;
+  text-align: right;
+}
+
+/* ── Farm Settings Panel ────────────────────────────────────── */
+.settings-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-title {
+  font-size: 1rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-toggle-icon {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: transform 0.25s;
+}
+
+.settings-toggle-icon.open { transform: rotate(180deg); }
+
+.settings-body {
+  display: none;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+.settings-body.open { display: block; }
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.settings-field label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.settings-field input,
+.settings-field select {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.settings-field input:focus,
+.settings-field select:focus {
+  border-color: var(--blue);
+}
+
+.settings-field select option {
+  background: var(--bg-card);
+}
+
+.settings-save-btn {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 10px 24px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+}
+
+.settings-save-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+.settings-save-btn:active { transform: translateY(0); }
+
+.settings-save-msg {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 0.82rem;
+  color: var(--green);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.settings-save-msg.visible { opacity: 1; }
+
+/* ── Legend ─────────────────────────────────────────────────── */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 24px;
+}
+
+.legend-title {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.legend-dot.green { background: var(--green); }
+.legend-dot.red   { background: var(--red); }
+.legend-dot.blue  { background: var(--blue); }
+
+/* ── Footer ─────────────────────────────────────────────────── */
+.footer {
+  text-align: center;
+  padding: 24px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
+}
+
+/* ── Skeleton / Loading State ───────────────────────────────── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+  color: transparent !important;
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .header { padding: 16px 18px; }
+  .main   { padding: 18px 14px; }
+  .header-title h1 { font-size: 1.2rem; }
+  .nodes-grid { grid-template-columns: 1fr; }
+  .moisture-value { font-size: 2.1rem; }
+}
+
+/* ── Pulse animation for active irrigation ───────────────────── */
+@keyframes pulse-border {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.25); }
+  50%       { box-shadow: 0 0 0 8px rgba(59,130,246,0); }
+}
+
+.node-card.state-irrigating {
+  animation: pulse-border 2s ease-in-out infinite;
+}
