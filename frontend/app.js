@@ -255,6 +255,35 @@ function capitalize(str) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Manual Valve Toggle
+// ─────────────────────────────────────────────────────────────────
+async function toggleValve(nodeId) {
+  // Get current state from the button text
+  const card = document.getElementById(`node-card-${nodeId}`);
+  const btn = card.querySelector('.irrigation-value');
+  const isCurrentlyOn = btn.textContent.includes('ON');
+  
+  // If it's ON, turn it OFF. If it's OFF, turn it ON.
+  const newState = isCurrentlyOn ? 'OFF' : 'ON'; 
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/toggle-valve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node: nodeId, state: newState }),
+    });
+    
+    if (response.ok) {
+      // Immediately fetch fresh data so the animation triggers instantly
+      fetchAndUpdate(); 
+    }
+  } catch (err) {
+    console.error('Failed to toggle valve:', err);
+    alert('Could not connect to backend to toggle valve.');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // STARTUP: Run immediately and then every 10 seconds
 // ─────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

@@ -391,6 +391,17 @@ body {
 .irrigation-value {
   font-size: 0.85rem;
   font-weight: 700;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 4px 12px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.irrigation-value:hover {
+  background: rgba(255,255,255,0.05);
 }
 
 .irr-on  { color: var(--blue); }

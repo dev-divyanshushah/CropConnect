@@ -1,13 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CropConnect – Smart Irrigation Dashboard</title>
-  <meta name="description" content="Smart Irrigation System Dashboard – Monitor soil moisture, irrigation status, and weather for 4 field sectors." />
+  <meta name="description"
+    content="Smart Irrigation System Dashboard – Monitor soil moisture, irrigation status, and weather for 4 field sectors." />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
 </head>
+
 <body>
 
   <!-- ══════════════════════════════════════════════════════ -->
@@ -43,7 +47,7 @@
         <div id="weather-icon" class="weather-icon">⏳</div>
         <div>
           <div id="weather-message" class="weather-message">Loading weather…</div>
-          <div id="weather-sub"     class="weather-sub">Checking forecast</div>
+          <div id="weather-sub" class="weather-sub">Checking forecast</div>
         </div>
       </div>
       <div class="weather-right">
@@ -113,7 +117,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <div class="irrigation-value irr-off">OFF</div>
+          <button class="irrigation-value irr-off" onclick="toggleValve(1)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -149,7 +153,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <div class="irrigation-value irr-off">OFF</div>
+          <button class="irrigation-value irr-off" onclick="toggleValve(2)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -185,7 +189,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <div class="irrigation-value irr-off">OFF</div>
+          <button class="irrigation-value irr-off" onclick="toggleValve(3)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -221,7 +225,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <div class="irrigation-value irr-off">OFF</div>
+          <button class="irrigation-value irr-off" onclick="toggleValve(4)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -306,9 +310,11 @@
   <!-- FOOTER                                                  -->
   <!-- ══════════════════════════════════════════════════════ -->
   <footer class="footer">
-    CropConnect Smart Irrigation System &nbsp;·&nbsp; Data refreshes every 10 seconds &nbsp;·&nbsp; 4 Nodes across 2 ESP8266 Masters
+    CropConnect Smart Irrigation System &nbsp;·&nbsp; Data refreshes every 10 seconds &nbsp;·&nbsp; 4 Nodes across 2
+    ESP8266 Masters
   </footer>
 
   <script src="app.js"></script>
 </body>
+
 </html>

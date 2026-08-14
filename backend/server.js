@@ -219,7 +219,10 @@ app.get('/api/status', async (req, res) => {
   const nodes = [];
   for (const nodeId of [1, 2, 3, 4]) {
     const d = sensorData[nodeId];
-    const irrigationOn = shouldIrrigate(d.moisture, rainExpected);
+    let irrigationOn = shouldIrrigate(d.moisture, rainExpected);
+
+    if (d.override === 'ON') irrigationOn = true;
+    if (d.override === 'OFF') irrigationOn = false;
 
     nodes.push({
       node: nodeId,
@@ -259,6 +262,17 @@ app.post('/api/settings', (req, res) => {
   if (state) farmSettings.state = state;
   console.log('⚙️  Farm settings updated:', farmSettings);
   res.json({ success: true, settings: farmSettings });
+});
+
+// ── Start Server ────────────────────────────────────────────────
+app.post('/api/toggle-valve', (req, res) => {
+  const { node, state } = req.body;
+  if (sensorData[node]) {
+    sensorData[node].override = state;
+    res.json({ success: true, override: state });
+  } else {
+    res.status(400).json({ error: 'Node not found' });
+  }
 });
 
 // ── Start Server ────────────────────────────────────────────────
