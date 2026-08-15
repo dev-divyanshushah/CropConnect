@@ -190,6 +190,20 @@ body {
   margin-top: 2px;
 }
 
+.weather-location-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-top: 5px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.weather-location-label::before {
+  content: '📍';
+  font-size: 0.82rem;
+}
+
 .weather-right {
   display: flex;
   align-items: center;

@@ -1,4 +1,4 @@
-﻿// =================================================================
+// =================================================================
 // CropConnect Smart Irrigation - Frontend Logic  (v2.1)
 // =================================================================
 //
@@ -59,6 +59,9 @@ const INDIA_CITIES = {
 // STATE -> CITY DROPDOWN LOGIC
 // =================================================================
 
+// Track whether initial load has synced dropdowns from backend
+let settingsInitialized = false;
+
 // Called when the state dropdown changes
 function onStateChange() {
   const stateEl  = document.getElementById('setting-state');
@@ -79,6 +82,30 @@ function onStateChange() {
     if (i === 0) opt.selected = true;
     cityEl.appendChild(opt);
   });
+}
+
+// Called when city dropdown changes - auto-save location immediately
+// This means the user doesn't need to click Save just to change location/weather
+async function onCityChange() {
+  const city  = document.getElementById('setting-city').value;
+  const state = document.getElementById('setting-state').value;
+  if (!city || !state) return;
+
+  // Update the weather location label immediately in the UI
+  const locLabel = document.getElementById('weather-location-label');
+  if (locLabel) locLabel.textContent = city + ', ' + state;
+
+  try {
+    await fetch(`${BACKEND_URL}/api/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ city, state }),
+    });
+    // Fetch fresh weather for the new city (small delay to let backend process)
+    setTimeout(fetchAndUpdate, 300);
+  } catch (err) {
+    console.error('Could not update location:', err.message);
+  }
 }
 
 // =================================================================
@@ -172,7 +199,7 @@ function setConnectionStatus(state) {
 }
 
 // =================================================================
-// Weather Strip
+// Weather Strip Updater
 // =================================================================
 function updateWeatherStrip(weather) {
   const strip  = document.getElementById('weather-strip');
@@ -181,6 +208,7 @@ function updateWeatherStrip(weather) {
   const sub    = document.getElementById('weather-sub');
   const tempEl = document.getElementById('weather-temp');
   const descEl = document.getElementById('weather-desc');
+  const locLabel = document.getElementById('weather-location-label');
 
   if (!weather || !weather.available) {
     strip.className = 'weather-strip';
@@ -191,19 +219,33 @@ function updateWeatherStrip(weather) {
     if (descEl) descEl.textContent = '-';
     return;
   }
+
+  // Update location label (only if the label exists and user isn't currently changing city)
+  if (locLabel && weather.city) {
+    // Only update from weather API response if label is still showing the default
+    if (!locLabel.dataset.userSet) {
+      locLabel.textContent = weather.city;
+    }
+  }
+
   if (weather.rainExpected) {
     strip.className = 'weather-strip rain';
     icon.textContent = 'rain';
-    msg.textContent = 'Rain is expected - Automatic irrigation is paused';
+    msg.textContent = 'Rain is expected – Automatic irrigation is paused';
     sub.textContent = `Forecast: ${weather.description || 'Rain'} · Expected rainfall: ${weather.maxRainMm || 0} mm`;
   } else {
     strip.className = 'weather-strip clear';
     icon.textContent = 'sun';
-    msg.textContent = 'No rain expected - Automatic irrigation is active';
+    msg.textContent = 'No rain expected – Automatic irrigation is active';
     sub.textContent = `Forecast: ${weather.description || 'Clear'} · ${weather.city || ''}`;
   }
   if (tempEl) tempEl.textContent = weather.temperature !== null && weather.temperature !== undefined ? `${weather.temperature}°C` : '-';
   if (descEl) descEl.textContent = weather.description ? capitalize(weather.description) : '-';
+
+  // Stale indicator
+  if (weather.stale) {
+    sub.textContent += ' (last known - live weather unavailable)';
+  }
 }
 
 // =================================================================
@@ -281,29 +323,43 @@ function updateNodeCard(node, weather) {
 }
 
 // =================================================================
-// Settings Field Updater (called on data refresh - only when not editing)
+// Settings Field Updater (called on data refresh)
+// IMPORTANT: Only syncs dropdowns on the FIRST load.
+// After that, we never overwrite the user's selections from polling.
+// The user controls city/state freely; Save button commits to backend.
 // =================================================================
 let userIsEditing = false;
 
 function updateSettingsFields(settings) {
   if (userIsEditing) return;
 
-  // Simple dropdowns: cropType, soilType, growthStage
+  // Simple dropdowns (non-location): always sync
   ['cropType', 'soilType', 'growthStage'].forEach(field => {
     const el = document.getElementById(`setting-${field}`);
     if (el && settings[field]) el.value = settings[field];
   });
 
-  // State dropdown
-  const stateEl = document.getElementById('setting-state');
-  if (stateEl && settings.state && stateEl.value !== settings.state) {
-    stateEl.value = settings.state;
-    onStateChange(); // repopulate city dropdown
-  }
+  // Location dropdowns: ONLY sync on the very first load, never after that.
+  // This prevents the 10s poll from overwriting the user's city/state selection.
+  if (!settingsInitialized) {
+    settingsInitialized = true;
 
-  // City dropdown (after state cities are loaded)
-  const cityEl = document.getElementById('setting-city');
-  if (cityEl && settings.city) cityEl.value = settings.city;
+    const stateEl = document.getElementById('setting-state');
+    if (stateEl && settings.state) {
+      stateEl.value = settings.state;
+      onStateChange(); // repopulate city list for this state
+    }
+    const cityEl = document.getElementById('setting-city');
+    if (cityEl && settings.city) {
+      cityEl.value = settings.city;
+    }
+
+    // Sync the weather location label
+    const locLabel = document.getElementById('weather-location-label');
+    if (locLabel && settings.city && settings.state) {
+      locLabel.textContent = settings.city + ', ' + settings.state;
+    }
+  }
 }
 
 // =================================================================
@@ -333,8 +389,13 @@ async function saveSettings() {
     const msg = document.getElementById('settings-save-msg');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 2500);
-    // Immediately fetch to get updated weather for new location
-    setTimeout(fetchAndUpdate, 500);
+
+    // Update weather location label immediately
+    const locLabel = document.getElementById('weather-location-label');
+    if (locLabel) locLabel.textContent = settings.city + ', ' + settings.state;
+
+    // Fetch fresh weather for new location right away
+    setTimeout(fetchAndUpdate, 300);
   } catch (err) {
     console.error('Could not save settings:', err);
     alert('Could not save settings. Is the backend running?');
@@ -424,14 +485,24 @@ document.addEventListener('DOMContentLoaded', () => {
     el.addEventListener('blur',  () => { userIsEditing = false; });
   });
 
-  // Populate default city dropdown for Delhi on startup
+  // Wire up state dropdown: when state changes, repopulate cities
   const stateEl = document.getElementById('setting-state');
   if (stateEl) {
-    stateEl.value = 'Delhi';
-    onStateChange();
+    stateEl.addEventListener('change', () => {
+      onStateChange();
+      // Auto-save location when state changes (first city in new state)
+      setTimeout(onCityChange, 50);
+    });
   }
 
-  // Initial fetch
+  // Wire up city dropdown: auto-save when city is selected
+  const cityEl = document.getElementById('setting-city');
+  if (cityEl) {
+    cityEl.addEventListener('change', onCityChange);
+  }
+
+  // Initial fetch - this will call updateSettingsFields which runs
+  // the FIRST-LOAD sync of location dropdowns from backend state
   fetchAndUpdate();
 
   // Refresh every 10 seconds

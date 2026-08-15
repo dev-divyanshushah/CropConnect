@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -52,6 +52,7 @@
         <div>
           <div id="weather-message" class="weather-message">Loading weather…</div>
           <div id="weather-sub" class="weather-sub">Checking forecast</div>
+          <div id="weather-location-label" class="weather-location-label">Loading location…</div>
         </div>
       </div>
       <div class="weather-right">
@@ -303,7 +304,7 @@
           <!-- State dropdown – All 29 States of India (appears BEFORE City) -->
           <div class="settings-field">
             <label for="setting-state">State</label>
-            <select id="setting-state" onchange="onStateChange()">
+            <select id="setting-state">
               <option value="">-- Select State --</option>
               <option value="Andhra Pradesh">Andhra Pradesh</option>
               <option value="Arunachal Pradesh">Arunachal Pradesh</option>
