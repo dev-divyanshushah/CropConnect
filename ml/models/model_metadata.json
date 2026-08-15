@@ -1,0 +1,36 @@
+{
+    "model_type": "XGBoost",
+    "target": "sm_tgt",
+    "features": [
+        "clay_content",
+        "sand_content",
+        "silt_content",
+        "sm_aux",
+        "sm_tgt_lag1",
+        "sm_tgt_lag3",
+        "sm_tgt_lag7",
+        "sm_tgt_roll7_mean",
+        "month",
+        "day_of_year"
+    ],
+    "preprocessing_requirements": [
+        "Resample to 1D continuous sequence",
+        "Forward-fill missing values (limit=5)",
+        "Generate lag features: sm_tgt_lag1, sm_tgt_lag3, sm_tgt_lag7",
+        "Generate rolling feature: shift(1).rolling(7).mean() for sm_tgt",
+        "Extract month and day_of_year from timestamp",
+        "Drop rows with NaNs in features or target"
+    ],
+    "expected_input_format": "tabular array matching the exact feature order",
+    "training_date": "2026-08-15T17:56:25Z",
+    "validation_metrics": {
+        "MAE": 0.03810397020581205,
+        "RMSE": 0.05472518164506746,
+        "R2": 0.6504741119284907
+    },
+    "test_metrics": {
+        "MAE": 0.04382915583670521,
+        "RMSE": 0.060791981904910676,
+        "R2": 0.5865249008991031
+    }
+}

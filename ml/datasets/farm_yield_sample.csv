@@ -1,0 +1,6 @@
+Farm_ID,Crop_Type,Farm_Area(acres),Irrigation_Type,Fertilizer_Used(tons),Pesticide_Used(kg),Yield(tons),Soil_Type,Season,Water_Usage(cubic meters)
+F001,Cotton,329.40,Sprinkler,8.14,2.21,14.44,Loamy,Kharif,76648.20
+F002,Carrot,18.67,Manual,4.77,4.36,42.91,Peaty,Kharif,68725.54
+F003,Sugarcane,306.03,Flood,2.91,0.56,33.44,Silty,Kharif,75538.56
+F004,Tomato,380.21,Rain-fed,3.32,4.35,34.08,Silty,Zaid,45401.23
+F005,Tomato,135.56,Sprinkler,8.33,4.48,43.28,Clay,Zaid,93718.69

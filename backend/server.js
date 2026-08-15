@@ -49,12 +49,13 @@ const MOCK_MODE             = process.env.MOCK_MODE === 'true';
 // Threshold: 65% (irrigate if moisture < 65%)
 const MOISTURE_THRESHOLD    = parseInt(process.env.MOISTURE_THRESHOLD) || 65;
 const OPENWEATHER_API_KEY   = process.env.OPENWEATHER_API_KEY || '';
-const DEFAULT_CITY          = process.env.CITY || 'Delhi';
-const DEFAULT_STATE         = process.env.STATE || 'Delhi';
+const DEFAULT_CITY          = process.env.CITY || 'Mumbai';
+const DEFAULT_STATE         = process.env.STATE || 'Maharashtra';
 const MONGODB_URI           = process.env.MONGODB_URI || '';
 const GITHUB_AUTO_PUSH      = process.env.GITHUB_AUTO_PUSH === 'true';
 const GIT_PUSH_INTERVAL_MIN = parseInt(process.env.GIT_PUSH_INTERVAL_MINUTES) || 30;
 const JSON_SNAPSHOT_PATH    = process.env.JSON_SNAPSHOT_PATH || '../data/irrigation_data.json';
+const ML_API_URL            = process.env.ML_API_URL || 'http://localhost:8000';
 
 // Resolve snapshot path relative to this file's directory
 const SNAPSHOT_FILE = path.resolve(__dirname, JSON_SNAPSHOT_PATH);
@@ -232,11 +233,17 @@ async function fetchWeather() {
     const forecasts = json.list || [];
     let rainExpected = false;
     let maxRainMm    = 0;
-    for (const f of forecasts) {
-      const rain = f.rain ? (f.rain['3h'] || 0) : 0;
-      if (rain > 0) { rainExpected = true; maxRainMm = Math.max(maxRainMm, rain); }
-      const wid = f.weather && f.weather[0] ? f.weather[0].id : 0;
-      if (wid >= 200 && wid < 700) rainExpected = true;
+    for (const forecast of forecasts) {
+      const rain = forecast.rain ? (forecast.rain['1h'] || forecast.rain['3h'] || 0) : 0;
+      if (rain > 0) {
+        rainExpected = true;
+        maxRainMm = Math.max(maxRainMm, rain);
+      }
+      // Also check weather condition codes: 2xx=thunderstorm, 3xx=drizzle, 5xx=rain
+      const weatherId = forecast.weather && forecast.weather[0] ? forecast.weather[0].id : 0;
+      if (weatherId >= 200 && weatherId < 700) {
+        rainExpected = true;
+      }
     }
     const current     = forecasts[0] || {};
     const temp        = current.main ? Math.round(current.main.temp) : null;
@@ -263,6 +270,56 @@ async function fetchWeather() {
     }
     return { available: false, message: 'Weather unavailable: ' + err.message };
   }
+}
+
+// ==============================================================
+// SECTION 4.5 - ML PREDICTION INTEGRATION
+// ==============================================================
+
+async function fetchMLPrediction(nodeData) {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now - start;
+  const day_of_year = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const month = now.getMonth() + 1;
+
+  // 1. Soil Composition Mapping (Configured mapping, not raw sensor measurements)
+  const soilCompositionMap = {
+    "Loamy": { clay_content: 20.0, sand_content: 40.0, silt_content: 40.0 },
+    "Clay":  { clay_content: 60.0, sand_content: 20.0, silt_content: 20.0 },
+    "Sandy": { clay_content: 10.0, sand_content: 80.0, silt_content: 10.0 }
+  };
+  const soilProps = soilCompositionMap[farmSettings.soilType] || soilCompositionMap["Loamy"];
+
+  // 2. Historical features check
+  // The backend does not yet maintain lag1, lag3, lag7, or roll7_mean.
+  // We MUST NOT use placeholders or fake values.
+  const hasHistory = false; // To be implemented in next phase
+
+  if (!hasHistory) {
+    return {
+      available: false,
+      error: "Missing required historical ML features (lag1, lag3, lag7, roll7). ML disabled until history cache is implemented."
+    };
+  }
+
+  // Future payload when history is implemented:
+  // const payload = {
+  //   clay_content: soilProps.clay_content,
+  //   sand_content: soilProps.sand_content,
+  //   silt_content: soilProps.silt_content,
+  //   sm_tgt_lag1: nodeData.history.lag1, 
+  //   sm_tgt_lag3: nodeData.history.lag3, 
+  //   sm_tgt_lag7: nodeData.history.lag7, 
+  //   sm_tgt_roll7_mean: nodeData.history.roll7,
+  //   month: month,
+  //   day_of_year: day_of_year
+  // };
+
+  // try {
+  //   const response = await fetch(`${ML_API_URL}/predict`, { ... });
+  //   ...
+  // }
 }
 
 // ==============================================================
@@ -300,6 +357,10 @@ async function buildProcessedNodes(weather) {
   for (const nodeId of [1, 2, 3, 4]) {
     const d = sensorData[nodeId];
     const irrigationOn = shouldIrrigate(d.moisture, rainExpected, d.override);
+    
+    // Fetch ML data gracefully
+    const mlData = await fetchMLPrediction(d);
+
     nodes.push({
       node:        nodeId,
       master:      d.master,
@@ -308,6 +369,7 @@ async function buildProcessedNodes(weather) {
       irrigationOn,
       override:    d.override || null,
       updatedAt:   d.updatedAt,
+      ml:          mlData
     });
   }
   return nodes;
@@ -630,7 +692,19 @@ app.get('/api/snapshot', (req, res) => {
 
 // GET /api/health
 // Quick health check - useful for monitoring and tests
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let mlHealth = { status: 'unknown' };
+  try {
+    const mlRes = await fetch(`${ML_API_URL}/health`, { timeout: 2000 });
+    if (mlRes.ok) {
+      mlHealth = await mlRes.json();
+    } else {
+      mlHealth = { status: 'unreachable', error: `HTTP ${mlRes.status}` };
+    }
+  } catch (err) {
+    mlHealth = { status: 'unreachable', error: err.message };
+  }
+
   res.json({
     status:        'ok',
     uptime:        Math.round(process.uptime()),
@@ -643,6 +717,7 @@ app.get('/api/health', (req, res) => {
       : null,
     lastPushTime:  lastPushTime ? new Date(lastPushTime).toISOString() : null,
     timestamp:     new Date().toISOString(),
+    mlService:     mlHealth
   });
 });
 

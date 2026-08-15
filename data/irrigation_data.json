@@ -1,51 +1,51 @@
 {
-  "timestamp": "2026-08-15T07:39:15.648Z",
+  "timestamp": "2026-08-15T18:40:53.198Z",
   "dataSource": "MOCK",
   "threshold": 65,
   "weather": {
     "available": true,
     "rainExpected": true,
-    "temperature": 27,
+    "temperature": 28,
     "description": "light rain",
-    "city": "Aizawl",
-    "maxRainMm": 3.9
+    "city": "Mumbai",
+    "maxRainMm": 1
   },
   "nodes": {
     "node1": {
       "nodeId": 1,
       "masterId": 1,
-      "moisture": 28,
+      "moisture": 24,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T07:39:15.648Z"
+      "updatedAt": "2026-08-15T18:40:53.197Z"
     },
     "node2": {
       "nodeId": 2,
       "masterId": 1,
-      "moisture": 57,
+      "moisture": 58,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T07:39:15.648Z"
+      "updatedAt": "2026-08-15T18:40:53.197Z"
     },
     "node3": {
       "nodeId": 3,
       "masterId": 2,
-      "moisture": 43,
+      "moisture": 39,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T07:39:15.648Z"
+      "updatedAt": "2026-08-15T18:40:53.197Z"
     },
     "node4": {
       "nodeId": 4,
       "masterId": 2,
-      "moisture": 74,
+      "moisture": 68,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T07:39:15.648Z"
+      "updatedAt": "2026-08-15T18:40:53.197Z"
     }
   }
 }

@@ -1,0 +1,61 @@
+{
+    "model_type": "XGBoost",
+    "target": "sm_tgt",
+    "features": [
+        "clay_content",
+        "sand_content",
+        "silt_content",
+        "sm_tgt_lag1",
+        "sm_tgt_lag3",
+        "sm_tgt_lag7",
+        "sm_tgt_roll7_mean",
+        "month",
+        "day_of_year"
+    ],
+    "feature_meanings": {
+        "clay_content": "Percentage of clay in soil (0-100)",
+        "sand_content": "Percentage of sand in soil (0-100)",
+        "silt_content": "Percentage of silt in soil (0-100)",
+        "sm_tgt_lag1": "Target moisture average from 1 day prior",
+        "sm_tgt_lag3": "Target moisture average from 3 days prior",
+        "sm_tgt_lag7": "Target moisture average from 7 days prior",
+        "sm_tgt_roll7_mean": "7-day rolling average of moisture strictly prior to current day",
+        "month": "Month of the year (1-12)",
+        "day_of_year": "Day of the year (1-365)"
+    },
+    "soil_composition_mapping_strategy": {
+        "Loamy": {
+            "clay_content": 20.0,
+            "sand_content": 40.0,
+            "silt_content": 40.0
+        },
+        "Clay": {
+            "clay_content": 60.0,
+            "sand_content": 20.0,
+            "silt_content": 20.0
+        },
+        "Sandy": {
+            "clay_content": 10.0,
+            "sand_content": 80.0,
+            "silt_content": 10.0
+        }
+    },
+    "lag_definitions": "Daily averages computed at midnight. lag1 = yesterday's average.",
+    "rolling_window_definition": "Mean of the previous 7 daily averages.",
+    "train_validation_test_periods": {
+        "Train": "January - September 2013",
+        "Validation": "October 2013",
+        "Test": "November - December 2013"
+    },
+    "training_date": "2026-08-15T18:29:05Z",
+    "validation_metrics": {
+        "MAE": 0.03831424727484973,
+        "RMSE": 0.05523733475556438,
+        "R2": 0.6439013271964442
+    },
+    "test_metrics": {
+        "MAE": 0.04505707212838854,
+        "RMSE": 0.061993737739654484,
+        "R2": 0.5700158975799602
+    }
+}

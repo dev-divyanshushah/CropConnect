@@ -1,0 +1,88 @@
+{
+    "rows": 321584,
+    "cols": 8,
+    "columns": [
+        "time",
+        "latitude",
+        "longitude",
+        "clay_content",
+        "sand_content",
+        "silt_content",
+        "sm_aux",
+        "sm_tgt"
+    ],
+    "dtypes": {
+        "time": "datetime64[us]",
+        "latitude": "float64",
+        "longitude": "float64",
+        "clay_content": "float64",
+        "sand_content": "float64",
+        "silt_content": "float64",
+        "sm_aux": "float64",
+        "sm_tgt": "float64"
+    },
+    "missing": {
+        "time": 0,
+        "latitude": 0,
+        "longitude": 0,
+        "clay_content": 0,
+        "sand_content": 0,
+        "silt_content": 0,
+        "sm_aux": 0,
+        "sm_tgt": 0
+    },
+    "duplicates": 0,
+    "unique_locations": 1166,
+    "time_range": [
+        "2013-01-01 00:00:00",
+        "2013-12-31 00:00:00"
+    ],
+    "sampling_frequency": "1 days 00:00:00",
+    "evenly_spaced": false,
+    "max_gaps_in_a_loc": 98,
+    "observations_per_location_mean": 258.24,
+    "feature_stats": {
+        "latitude": {
+            "mean": 50.84035664087766,
+            "min": 48.125,
+            "max": 54.875,
+            "std": 1.6464839336500463
+        },
+        "longitude": {
+            "mean": 9.622973313348924,
+            "min": 2.125,
+            "max": 15.875,
+            "std": 3.7898993345756615
+        },
+        "clay_content": {
+            "mean": 20.887920418926313,
+            "min": 4.0,
+            "max": 46.0,
+            "std": 7.922679907856165
+        },
+        "sand_content": {
+            "mean": 39.24296295835614,
+            "min": 6.0,
+            "max": 86.0,
+            "std": 21.846044504854767
+        },
+        "silt_content": {
+            "mean": 39.894503457883474,
+            "min": 8.0,
+            "max": 72.0,
+            "std": 15.229784743106439
+        },
+        "sm_aux": {
+            "mean": 0.1941087286834687,
+            "min": -0.03865731,
+            "max": 0.80232096,
+            "std": 0.08855163325871898
+        },
+        "sm_tgt": {
+            "mean": 0.41189144982337433,
+            "min": 0.01,
+            "max": 0.6,
+            "std": 0.11052979879138092
+        }
+    }
+}
