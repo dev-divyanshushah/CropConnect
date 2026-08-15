@@ -445,6 +445,22 @@ async function toggleValve(nodeId) {
   }
 }
 
+async function setValveAuto(nodeId) {
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/toggle-valve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node: nodeId, state: 'AUTO' }),
+    });
+    if (response.ok) {
+      fetchAndUpdate();
+    }
+  } catch (err) {
+    console.error('Failed to set valve auto:', err);
+    alert('Could not connect to backend to set valve to AUTO.');
+  }
+}
+
 // =================================================================
 // ALL ON / ALL OFF - Global Control
 // Calls /api/toggle-all to set override on all 4 nodes at once.
@@ -454,8 +470,10 @@ async function toggleAll(state) {
   // Immediately disable buttons to prevent double-click
   const btnOn  = document.getElementById('btn-all-on');
   const btnOff = document.getElementById('btn-all-off');
+  const btnAuto = document.getElementById('btn-all-auto');
   if (btnOn)  btnOn.disabled  = true;
   if (btnOff) btnOff.disabled = true;
+  if (btnAuto) btnAuto.disabled = true;
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/toggle-all`, {
@@ -468,10 +486,17 @@ async function toggleAll(state) {
     await fetchAndUpdate();
   } catch (err) {
     console.error('Failed to toggle all valves:', err);
-    alert('Could not connect to backend to toggle all valves.');
+    alert('Could not send toggle-all command. Backend may be down.');
   } finally {
-    if (btnOn)  btnOn.disabled  = false;
-    if (btnOff) btnOff.disabled = false;
+    // Re-enable buttons after a short delay
+    setTimeout(() => {
+      const btnOn  = document.getElementById('btn-all-on');
+      const btnOff = document.getElementById('btn-all-off');
+      const btnAuto = document.getElementById('btn-all-auto');
+      if (btnOn)  btnOn.disabled  = false;
+      if (btnOff) btnOff.disabled = false;
+      if (btnAuto) btnAuto.disabled = false;
+    }, 1000);
   }
 }
 

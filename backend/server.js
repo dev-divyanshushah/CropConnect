@@ -284,7 +284,9 @@ function shouldIrrigate(moisture, rainExpected, override) {
   if (override === 'ON')  return true;
   if (override === 'OFF') return false;
   if (moisture === null || moisture === undefined) return false;
-  if (rainExpected) return false;
+  
+  // The user requested valves automatically turn on based ONLY on the 65% threshold
+  // without being paused by the rain forecast. 
   return moisture < MOISTURE_THRESHOLD;
 }
 
@@ -586,11 +588,10 @@ app.post('/api/toggle-valve', (req, res) => {
   const nodeId = parseInt(node);
   if (!sensorData[nodeId])
     return res.status(400).json({ success: false, error: 'Node not found' });
-  if (state !== 'ON' && state !== 'OFF' && state !== null)
-    return res.status(400).json({ success: false, error: 'state must be ON, OFF, or null' });
-  // Toggle: if already in same override state, clicking again clears it (back to AUTO)
-  const current     = sensorData[nodeId].override;
-  const newOverride = current === state ? null : state;
+  if (state !== 'ON' && state !== 'OFF' && state !== 'AUTO' && state !== null)
+    return res.status(400).json({ success: false, error: 'state must be ON, OFF, AUTO, or null' });
+  
+  const newOverride = (state === 'AUTO' || state === null) ? null : state;
   sensorData[nodeId].override = newOverride;
   console.log('OVERRIDE: Node ' + nodeId + ' -> ' + (newOverride || 'AUTO (cleared)'));
   processAndSnapshot().catch(err => console.error('Toggle snapshot error: ' + err.message));
@@ -598,18 +599,19 @@ app.post('/api/toggle-valve', (req, res) => {
 });
 
 // POST /api/toggle-all
-// Global ALL ON / ALL OFF - sets override on all 4 nodes at once
-// Body: { "state": "ON" } or { "state": "OFF" }
+// Global ALL ON / ALL OFF / ALL AUTO - sets override on all 4 nodes at once
+// Body: { "state": "ON" }, { "state": "OFF" }, or { "state": "AUTO" }
 app.post('/api/toggle-all', (req, res) => {
   const { state } = req.body || {};
-  if (state !== 'ON' && state !== 'OFF')
-    return res.status(400).json({ success: false, error: 'state must be ON or OFF' });
+  if (state !== 'ON' && state !== 'OFF' && state !== 'AUTO')
+    return res.status(400).json({ success: false, error: 'state must be ON, OFF or AUTO' });
   const results = [];
+  const newOverride = (state === 'AUTO') ? null : state;
   for (const nodeId of [1, 2, 3, 4]) {
-    sensorData[nodeId].override = state;
-    results.push({ node: nodeId, override: state });
+    sensorData[nodeId].override = newOverride;
+    results.push({ node: nodeId, override: newOverride });
   }
-  console.log('OVERRIDE-ALL: All nodes -> ' + state);
+  console.log('OVERRIDE-ALL: All nodes -> ' + (newOverride || 'AUTO (cleared)'));
   processAndSnapshot().catch(err => console.error('Toggle-all snapshot error: ' + err.message));
   res.json({ success: true, state, nodes: results });
 });

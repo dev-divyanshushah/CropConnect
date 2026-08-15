@@ -96,6 +96,9 @@
       <button class="global-btn global-btn-off" id="btn-all-off" onclick="toggleAll('OFF')">
         ⛔ ALL OFF
       </button>
+      <button class="global-btn global-btn-auto" id="btn-all-auto" onclick="toggleAll('AUTO')">
+        🤖 ALL AUTO
+      </button>
     </div>
 
     <!-- ── Section: Sensor Nodes ──────────────────────────── -->
@@ -133,7 +136,10 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" id="valve-btn-1" onclick="toggleValve(1)">OFF</button>
+          <div style="display:flex; gap:6px;">
+            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(1)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="valve-btn-1" onclick="toggleValve(1)">OFF</button>
+          </div>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -169,7 +175,10 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" id="valve-btn-2" onclick="toggleValve(2)">OFF</button>
+          <div style="display:flex; gap:6px;">
+            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(2)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="valve-btn-2" onclick="toggleValve(2)">OFF</button>
+          </div>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -205,7 +214,10 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" id="valve-btn-3" onclick="toggleValve(3)">OFF</button>
+          <div style="display:flex; gap:6px;">
+            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(3)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="valve-btn-3" onclick="toggleValve(3)">OFF</button>
+          </div>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -241,7 +253,10 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" id="valve-btn-4" onclick="toggleValve(4)">OFF</button>
+          <div style="display:flex; gap:6px;">
+            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(4)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="valve-btn-4" onclick="toggleValve(4)">OFF</button>
+          </div>
         </div>
 
         <div class="last-updated">No data received yet</div>

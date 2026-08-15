@@ -760,3 +760,24 @@ body {
 .mode-error      .data-mode-dot { background: var(--red); }
 .mode-offline    .data-mode-dot { background: var(--red); }
 
+/* ── Auto Buttons ───────────────────────────────────────────── */
+.global-btn-auto {
+  background: var(--gray-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--gray-border);
+}
+
+.global-btn-auto:hover {
+  background: rgba(138, 143, 168, 0.2);
+}
+
+.irr-auto-btn {
+  background: var(--gray-bg);
+  color: var(--text-secondary);
+  border: 1px solid var(--gray-border);
+}
+
+.irr-auto-btn:hover {
+  background: rgba(138, 143, 168, 0.2);
+  color: var(--text-primary);
+}
