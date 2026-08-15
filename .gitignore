@@ -1,6 +1,22 @@
+# ── Node.js ──────────────────────────────────────────────────
 backend/node_modules/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Environment files (NEVER commit secrets) ──────────────────
+# These contain API keys, passwords, and MongoDB credentials
+.env
+*.env
 backend/.env
-*.log
+
+# ── OS / Editor files ─────────────────────────────────────────
 .DS_Store
 Thumbs.db
-.env
+*.log
+
+# ── Data snapshot ─────────────────────────────────────────────
+# data/irrigation_data.json is INTENTIONALLY TRACKED by git.
+# The GitHub auto-push feature commits this file.
+# Do NOT add data/ to .gitignore.

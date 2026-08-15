@@ -605,3 +605,51 @@ body {
 .node-card.state-irrigating {
   animation: pulse-border 2s ease-in-out infinite;
 }
+
+/* ── Additional connection dot states ──────────────────────────── */
+.connection-dot.warning { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+
+/* ── Data Mode Banner ──────────────────────────────────────────── */
+/* Appears below the header when data is NOT live */
+.data-mode-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s;
+}
+
+.data-mode-banner.visible { display: flex; }
+
+.data-mode-banner.mode-last-known {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: var(--yellow-border);
+  color: var(--yellow);
+}
+
+.data-mode-banner.mode-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+
+.data-mode-banner.mode-offline {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+
+.data-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mode-last-known .data-mode-dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.mode-error      .data-mode-dot { background: var(--red); }
+.mode-offline    .data-mode-dot { background: var(--red); }
+

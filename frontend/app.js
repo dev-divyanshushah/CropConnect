@@ -28,10 +28,20 @@ async function fetchAndUpdate() {
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
     const data = await response.json();
 
-    // Update connection dot → green (connected)
-    setConnectionStatus(true);
+    // Update data mode banner (LIVE / LAST_KNOWN / ERROR)
+    const dataMode = data.dataMode || 'LIVE';
+    updateDataModeBanner(dataMode, data.checkpoint);
 
-    // Show/hide the MOCK mode badge in the header
+    // Update connection dot based on mode
+    if (dataMode === 'LIVE') {
+      setConnectionStatus('live');
+    } else if (dataMode === 'LAST_KNOWN') {
+      setConnectionStatus('last_known');
+    } else {
+      setConnectionStatus('error');
+    }
+
+    // Show/hide MOCK badge
     const mockBadge = document.getElementById('mock-badge');
     if (data.mockMode) {
       mockBadge.classList.add('visible');
@@ -58,24 +68,65 @@ async function fetchAndUpdate() {
 
   } catch (err) {
     console.error('❌ Could not reach backend:', err.message);
-    setConnectionStatus(false);
+    setConnectionStatus('offline');
+    updateDataModeBanner('OFFLINE', null);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Update the data mode banner (LIVE / LAST_KNOWN / ERROR / OFFLINE)
+// ─────────────────────────────────────────────────────────────────
+function updateDataModeBanner(mode, checkpointTime) {
+  const banner = document.getElementById('data-mode-banner');
+  const text   = document.getElementById('data-mode-text');
+  if (!banner || !text) return;
+
+  // Remove all mode classes
+  banner.classList.remove('visible', 'mode-last-known', 'mode-error', 'mode-offline');
+
+  if (mode === 'LIVE') {
+    // No banner when live
+    return;
+  }
+
+  banner.classList.add('visible');
+
+  if (mode === 'LAST_KNOWN') {
+    banner.classList.add('mode-last-known');
+    const ageStr = checkpointTime
+      ? ` (as of ${new Date(checkpointTime).toLocaleTimeString()})`
+      : '';
+    text.textContent = `⚠️ Showing last known data${ageStr} — Live connection lost. Auto-reconnecting…`;
+  } else if (mode === 'OFFLINE') {
+    banner.classList.add('mode-offline');
+    text.textContent = '🔴 OFFLINE — Cannot reach backend. Check that the server is running.';
+  } else {
+    banner.classList.add('mode-error');
+    text.textContent = '🔴 ERROR — Backend encountered an error. Last known data may be stale.';
   }
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Update the connection status indicator in the header
+// States: 'live', 'last_known', 'offline', 'error'
 // ─────────────────────────────────────────────────────────────────
-function setConnectionStatus(isConnected) {
+function setConnectionStatus(state) {
   const dot  = document.getElementById('connection-dot');
   const text = document.getElementById('connection-text');
-  if (isConnected) {
-    dot.className = 'connection-dot connected';
-    text.textContent = 'Live';
+  if (!dot || !text) return;
+
+  if (state === 'live') {
+    dot.className  = 'connection-dot connected';
+    text.textContent = '● Live';
+  } else if (state === 'last_known') {
+    dot.className  = 'connection-dot warning';
+    text.textContent = '⚠ Last Known';
   } else {
-    dot.className = 'connection-dot error';
-    text.textContent = 'No connection';
+    dot.className  = 'connection-dot error';
+    text.textContent = state === 'offline' ? '✕ Offline' : '✕ Error';
   }
 }
+
 
 // ─────────────────────────────────────────────────────────────────
 // Update the weather strip at the top of the dashboard
