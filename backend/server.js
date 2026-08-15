@@ -1,4 +1,4 @@
-﻿// ==============================================================
+// ==============================================================
 // CropConnect Smart Irrigation - Backend Server  (v2.0)
 // ==============================================================
 //
@@ -46,10 +46,11 @@ app.use(express.static('../frontend'));
 // ── Settings from .env ──────────────────────────────────────────
 const PORT                  = parseInt(process.env.PORT) || 3000;
 const MOCK_MODE             = process.env.MOCK_MODE === 'true';
-const MOISTURE_THRESHOLD    = parseInt(process.env.MOISTURE_THRESHOLD) || 40;
+// Threshold: 65% (irrigate if moisture < 65%)
+const MOISTURE_THRESHOLD    = parseInt(process.env.MOISTURE_THRESHOLD) || 65;
 const OPENWEATHER_API_KEY   = process.env.OPENWEATHER_API_KEY || '';
-const CITY                  = process.env.CITY || 'Delhi';
-const STATE                 = process.env.STATE || 'Delhi';
+const DEFAULT_CITY          = process.env.CITY || 'Delhi';
+const DEFAULT_STATE         = process.env.STATE || 'Delhi';
 const MONGODB_URI           = process.env.MONGODB_URI || '';
 const GITHUB_AUTO_PUSH      = process.env.GITHUB_AUTO_PUSH === 'true';
 const GIT_PUSH_INTERVAL_MIN = parseInt(process.env.GIT_PUSH_INTERVAL_MINUTES) || 30;
@@ -62,13 +63,18 @@ function isWeatherConfigured() {
   return OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'your_openweathermap_api_key_here';
 }
 
+// Helper: get the currently active city for weather (uses live farmSettings)
+function activeCity() {
+  return farmSettings.city || DEFAULT_CITY;
+}
+
 console.log('');
 console.log('========================================');
 console.log('   CropConnect Smart Irrigation  v2.0');
 console.log('========================================');
 console.log('   Mode      : ' + (MOCK_MODE ? 'MOCK (fake data)' : 'REAL (hardware)'));
-console.log('   Threshold : ' + MOISTURE_THRESHOLD + '%');
-console.log('   Location  : ' + CITY + ', ' + STATE);
+console.log('   Threshold : ' + MOISTURE_THRESHOLD + '% (irrigate if moisture < ' + MOISTURE_THRESHOLD + '%)');
+console.log('   Location  : ' + DEFAULT_CITY + ', ' + DEFAULT_STATE);
 console.log('   Weather   : ' + (isWeatherConfigured() ? 'Configured' : 'Not configured'));
 console.log('   MongoDB   : ' + (MONGODB_URI ? 'Connecting...' : 'Not configured (memory-only)'));
 console.log('   AutoPush  : ' + (GITHUB_AUTO_PUSH ? 'Enabled every ' + GIT_PUSH_INTERVAL_MIN + ' min' : 'Disabled'));
@@ -163,8 +169,8 @@ let farmSettings = {
   cropType:    'Wheat',
   soilType:    'Loamy',
   growthStage: 'Vegetative',
-  city:        CITY,
-  state:       STATE,
+  city:        DEFAULT_CITY,
+  state:       DEFAULT_STATE,
 };
 
 // Weather cache (10-minute TTL)
@@ -206,7 +212,10 @@ if (MOCK_MODE) {
 // ==============================================================
 
 async function fetchWeather() {
-  if (weatherCache.data && weatherCache.fetchedAt) {
+  // Use the CURRENT city from farmSettings (updated when user changes location)
+  const city = activeCity();
+
+  if (weatherCache.data && weatherCache.fetchedAt && weatherCache.city === city) {
     if (Date.now() - weatherCache.fetchedAt < 10 * 60 * 1000) {
       return weatherCache.data;
     }
@@ -216,7 +225,7 @@ async function fetchWeather() {
   }
   try {
     const url = 'https://api.openweathermap.org/data/2.5/forecast?q=' +
-      encodeURIComponent(CITY) + '&appid=' + OPENWEATHER_API_KEY + '&units=metric&cnt=8';
+      encodeURIComponent(city) + '&appid=' + OPENWEATHER_API_KEY + '&units=metric&cnt=8';
     const response = await fetch(url, { timeout: 8000 });
     if (!response.ok) throw new Error('Weather API HTTP ' + response.status);
     const json = await response.json();
@@ -238,15 +247,16 @@ async function fetchWeather() {
       maxRainMm:    Math.round(maxRainMm * 10) / 10,
       temperature:  temp,
       description,
-      city: json.city ? json.city.name : CITY,
+      city: json.city ? json.city.name : city,
       message: rainExpected
         ? 'Rain expected (' + maxRainMm.toFixed(1) + ' mm) - Irrigation paused'
         : 'No rain expected - Auto irrigation active',
     };
-    weatherCache = { data: result, fetchedAt: Date.now() };
+    weatherCache = { data: result, fetchedAt: Date.now(), city };
+    console.log('WEATHER: Fetched for ' + city + ' - ' + (rainExpected ? 'RAIN' : 'CLEAR') + ' ' + temp + 'C');
     return result;
   } catch (err) {
-    console.error('WARN: Weather fetch failed: ' + err.message);
+    console.error('WARN: Weather fetch failed for ' + city + ': ' + err.message);
     if (weatherCache.data) {
       console.log('   -> Returning stale weather cache as fallback');
       return Object.assign({}, weatherCache.data, { stale: true });
@@ -551,8 +561,20 @@ app.post('/api/settings', (req, res) => {
   if (cropType)    farmSettings.cropType    = String(cropType).trim();
   if (soilType)    farmSettings.soilType    = String(soilType).trim();
   if (growthStage) farmSettings.growthStage = String(growthStage).trim();
-  if (city)        farmSettings.city        = String(city).trim();
-  if (state)       farmSettings.state       = String(state).trim();
+
+  // If city or state changed, IMMEDIATELY clear weather cache so next /api/status
+  // fetches fresh weather for the new location (no stale data shown)
+  const newCity  = city  ? String(city).trim()  : null;
+  const newState = state ? String(state).trim() : null;
+  const cityChanged = newCity  && newCity  !== farmSettings.city;
+  const stateChanged = newState && newState !== farmSettings.state;
+  if (newCity)  farmSettings.city  = newCity;
+  if (newState) farmSettings.state = newState;
+  if (cityChanged || stateChanged) {
+    weatherCache = { data: null, fetchedAt: null, city: null };
+    console.log('SETTINGS: Location changed to ' + farmSettings.city + ', ' + farmSettings.state + ' - weather cache cleared');
+  }
+
   console.log('SETTINGS: Updated -', JSON.stringify(farmSettings));
   res.json({ success: true, settings: farmSettings });
 });
@@ -566,12 +588,30 @@ app.post('/api/toggle-valve', (req, res) => {
     return res.status(400).json({ success: false, error: 'Node not found' });
   if (state !== 'ON' && state !== 'OFF' && state !== null)
     return res.status(400).json({ success: false, error: 'state must be ON, OFF, or null' });
+  // Toggle: if already in same override state, clicking again clears it (back to AUTO)
   const current     = sensorData[nodeId].override;
   const newOverride = current === state ? null : state;
   sensorData[nodeId].override = newOverride;
   console.log('OVERRIDE: Node ' + nodeId + ' -> ' + (newOverride || 'AUTO (cleared)'));
   processAndSnapshot().catch(err => console.error('Toggle snapshot error: ' + err.message));
   res.json({ success: true, node: nodeId, override: newOverride });
+});
+
+// POST /api/toggle-all
+// Global ALL ON / ALL OFF - sets override on all 4 nodes at once
+// Body: { "state": "ON" } or { "state": "OFF" }
+app.post('/api/toggle-all', (req, res) => {
+  const { state } = req.body || {};
+  if (state !== 'ON' && state !== 'OFF')
+    return res.status(400).json({ success: false, error: 'state must be ON or OFF' });
+  const results = [];
+  for (const nodeId of [1, 2, 3, 4]) {
+    sensorData[nodeId].override = state;
+    results.push({ node: nodeId, override: state });
+  }
+  console.log('OVERRIDE-ALL: All nodes -> ' + state);
+  processAndSnapshot().catch(err => console.error('Toggle-all snapshot error: ' + err.message));
+  res.json({ success: true, state, nodes: results });
 });
 
 // GET /api/snapshot

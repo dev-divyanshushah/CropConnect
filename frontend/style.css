@@ -610,6 +610,99 @@ body {
 .connection-dot.warning { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
 
 /* ── Data Mode Banner ──────────────────────────────────────────── */
+.data-mode-banner {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  transition: all 0.3s;
+}
+.data-mode-banner.visible { display: flex; }
+.data-mode-banner.mode-last-known {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: var(--yellow-border);
+  color: var(--yellow);
+}
+.data-mode-banner.mode-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+.data-mode-banner.mode-offline {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+.data-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mode-last-known .data-mode-dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+.mode-error      .data-mode-dot { background: var(--red); }
+.mode-offline    .data-mode-dot { background: var(--red); }
+
+/* ── Global ALL ON / ALL OFF Controls ─────────────────────────── */
+.global-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.global-controls-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+.global-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 22px;
+  border-radius: 999px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+}
+.global-btn-on {
+  background: var(--blue-bg);
+  border: 1.5px solid var(--blue-border);
+  color: var(--blue);
+}
+.global-btn-on:hover {
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+.global-btn-off {
+  background: var(--red-bg);
+  border: 1.5px solid var(--red-border);
+  color: var(--red);
+}
+.global-btn-off:hover {
+  background: var(--red);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  transform: translateY(-1px);
+}
+.global-btn:active { transform: translateY(0); }
+
+
+/* ── Data Mode Banner ──────────────────────────────────────────── */
 /* Appears below the header when data is NOT live */
 .data-mode-banner {
   display: none;

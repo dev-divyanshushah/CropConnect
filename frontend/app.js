@@ -1,27 +1,89 @@
-// ═══════════════════════════════════════════════════════════════
-// CropConnect Smart Irrigation – Frontend Logic
-// ═══════════════════════════════════════════════════════════════
+﻿// =================================================================
+// CropConnect Smart Irrigation - Frontend Logic  (v2.1)
+// =================================================================
 //
-// What this file does (in simple terms):
+// What this file does:
 //   1. Every 10 seconds, asks the backend for sensor data
 //   2. Updates each node card with moisture, status, irrigation
 //   3. Updates the weather strip at the top
-//   4. Handles the settings panel (crop type, soil type, etc.)
+//   4. Handles individual valve toggle AND global ALL ON / ALL OFF
+//   5. Handles State -> City dependent dropdown for 29 Indian states
+//   6. Handles the settings panel (crop type, soil type, etc.)
 //
 // Note: NO API keys here. Everything sensitive is in the backend.
-// ═══════════════════════════════════════════════════════════════
+// =================================================================
 
-// ── Backend URL ─────────────────────────────────────────────────
-// When running locally, the backend is at http://localhost:3000
-// When deployed to a server, change this to your server's address
+// ── Backend URL ──────────────────────────────────────────────────
 const BACKEND_URL = 'http://localhost:3000';
 
-// ── How often to refresh data ───────────────────────────────────
+// ── How often to refresh data ────────────────────────────────────
 const REFRESH_INTERVAL_MS = 10000; // 10 seconds
 
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// INDIA STATE -> CITY MAP  (all 29 states)
+// Add or adjust cities as needed. This is the single source of truth.
+// =================================================================
+const INDIA_CITIES = {
+  'Andhra Pradesh':    ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore', 'Kurnool', 'Tirupati', 'Rajahmundry', 'Kadapa', 'Kakinada', 'Anantapur'],
+  'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Pasighat', 'Tawang', 'Ziro', 'Bomdila'],
+  'Assam':             ['Guwahati', 'Dibrugarh', 'Jorhat', 'Silchar', 'Tezpur', 'Nagaon', 'Tinsukia', 'Bongaigaon'],
+  'Bihar':             ['Patna', 'Gaya', 'Muzaffarpur', 'Bhagalpur', 'Purnia', 'Darbhanga', 'Bihar Sharif', 'Arrah', 'Begusarai'],
+  'Chhattisgarh':      ['Raipur', 'Bilaspur', 'Durg', 'Korba', 'Rajnandgaon', 'Jagdalpur', 'Raigarh', 'Ambikapur'],
+  'Goa':               ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa', 'Ponda'],
+  'Gujarat':           ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Gandhinagar', 'Junagadh', 'Anand', 'Nadiad'],
+  'Haryana':           ['Faridabad', 'Gurgaon', 'Panipat', 'Ambala', 'Yamunanagar', 'Rohtak', 'Hisar', 'Karnal', 'Sonipat', 'Panchkula'],
+  'Himachal Pradesh':  ['Shimla', 'Solan', 'Mandi', 'Kangra', 'Dharamsala', 'Kullu', 'Hamirpur', 'Una', 'Bilaspur'],
+  'Jharkhand':         ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro', 'Deoghar', 'Hazaribagh', 'Dumka', 'Giridih'],
+  'Karnataka':         ['Bengaluru', 'Mysuru', 'Hubballi', 'Mangaluru', 'Belagavi', 'Davanagere', 'Ballari', 'Vijayapura', 'Shivamogga', 'Tumkuru'],
+  'Kerala':            ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Kollam', 'Palakkad', 'Alappuzha', 'Malappuram', 'Kannur', 'Kottayam'],
+  'Madhya Pradesh':    ['Bhopal', 'Indore', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Dewas', 'Satna', 'Ratlam', 'Rewa'],
+  'Maharashtra':       ['Mumbai', 'Pune', 'Nagpur', 'Nashik', 'Aurangabad', 'Solapur', 'Kolhapur', 'Amravati', 'Thane', 'Nanded'],
+  'Manipur':           ['Imphal', 'Thoubal', 'Kakching', 'Churachandpur', 'Bishnupur'],
+  'Meghalaya':         ['Shillong', 'Tura', 'Jowai', 'Nongstoin', 'Baghmara'],
+  'Mizoram':           ['Aizawl', 'Lunglei', 'Saiha', 'Champhai', 'Kolasib'],
+  'Nagaland':          ['Kohima', 'Dimapur', 'Mokokchung', 'Tuensang', 'Wokha'],
+  'Odisha':            ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Berhampur', 'Sambalpur', 'Puri', 'Balasore', 'Bhadrak', 'Baripada'],
+  'Punjab':            ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Pathankot', 'Hoshiarpur', 'Mohali', 'Moga'],
+  'Rajasthan':         ['Jaipur', 'Jodhpur', 'Udaipur', 'Kota', 'Ajmer', 'Bikaner', 'Alwar', 'Bhilwara', 'Sri Ganganagar', 'Sikar'],
+  'Sikkim':            ['Gangtok', 'Namchi', 'Mangan', 'Gyalshing'],
+  'Tamil Nadu':        ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Tiruppur', 'Erode', 'Vellore', 'Thanjavur'],
+  'Telangana':         ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Khammam', 'Ramagundam', 'Mahbubnagar', 'Nalgonda', 'Adilabad'],
+  'Tripura':           ['Agartala', 'Dharmanagar', 'Udaipur', 'Ambassa', 'Belonia'],
+  'Uttar Pradesh':     ['Lucknow', 'Kanpur', 'Agra', 'Varanasi', 'Meerut', 'Allahabad', 'Bareilly', 'Aligarh', 'Moradabad', 'Gorakhpur'],
+  'Uttarakhand':       ['Dehradun', 'Haridwar', 'Roorkee', 'Haldwani', 'Rudrapur', 'Kashipur', 'Rishikesh', 'Nainital'],
+  'West Bengal':       ['Kolkata', 'Howrah', 'Durgapur', 'Asansol', 'Siliguri', 'Malda', 'Bardhaman', 'Kharagpur', 'Haldia'],
+  'Delhi':             ['New Delhi', 'Dwarka', 'Rohini', 'Pitampura', 'Janakpuri', 'Lajpat Nagar', 'Saket', 'Noida (NCR)', 'Gurugram (NCR)'],
+};
+
+// =================================================================
+// STATE -> CITY DROPDOWN LOGIC
+// =================================================================
+
+// Called when the state dropdown changes
+function onStateChange() {
+  const stateEl  = document.getElementById('setting-state');
+  const cityEl   = document.getElementById('setting-city');
+  const state    = stateEl.value;
+  const cities   = INDIA_CITIES[state] || [];
+
+  // Clear and repopulate city dropdown
+  cityEl.innerHTML = '';
+  if (!state || cities.length === 0) {
+    cityEl.innerHTML = '<option value="">-- Select State first --</option>';
+    return;
+  }
+  cities.forEach((city, i) => {
+    const opt = document.createElement('option');
+    opt.value = city;
+    opt.textContent = city;
+    if (i === 0) opt.selected = true;
+    cityEl.appendChild(opt);
+  });
+}
+
+// =================================================================
 // MAIN: Fetch status from backend and update the UI
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
 async function fetchAndUpdate() {
   try {
     const response = await fetch(`${BACKEND_URL}/api/status`);
@@ -32,21 +94,13 @@ async function fetchAndUpdate() {
     const dataMode = data.dataMode || 'LIVE';
     updateDataModeBanner(dataMode, data.checkpoint);
 
-    // Update connection dot based on mode
+    // Update connection dot
     if (dataMode === 'LIVE') {
       setConnectionStatus('live');
     } else if (dataMode === 'LAST_KNOWN') {
       setConnectionStatus('last_known');
     } else {
       setConnectionStatus('error');
-    }
-
-    // Show/hide MOCK badge
-    const mockBadge = document.getElementById('mock-badge');
-    if (data.mockMode) {
-      mockBadge.classList.add('visible');
-    } else {
-      mockBadge.classList.remove('visible');
     }
 
     // Update weather strip
@@ -57,7 +111,7 @@ async function fetchAndUpdate() {
       updateNodeCard(node, data.weather);
     }
 
-    // Update farm settings fields (if user hasn't edited them)
+    // Update farm settings fields (only if user is not currently editing)
     if (data.farmSettings) {
       updateSettingsFields(data.farmSettings);
     }
@@ -67,166 +121,148 @@ async function fetchAndUpdate() {
     if (thresholdEl) thresholdEl.textContent = `${data.threshold}%`;
 
   } catch (err) {
-    console.error('❌ Could not reach backend:', err.message);
+    console.error('Could not reach backend:', err.message);
     setConnectionStatus('offline');
     updateDataModeBanner('OFFLINE', null);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Update the data mode banner (LIVE / LAST_KNOWN / ERROR / OFFLINE)
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Data Mode Banner
+// =================================================================
 function updateDataModeBanner(mode, checkpointTime) {
   const banner = document.getElementById('data-mode-banner');
   const text   = document.getElementById('data-mode-text');
   if (!banner || !text) return;
-
-  // Remove all mode classes
   banner.classList.remove('visible', 'mode-last-known', 'mode-error', 'mode-offline');
-
-  if (mode === 'LIVE') {
-    // No banner when live
-    return;
-  }
-
+  if (mode === 'LIVE') return;
   banner.classList.add('visible');
-
   if (mode === 'LAST_KNOWN') {
     banner.classList.add('mode-last-known');
     const ageStr = checkpointTime
       ? ` (as of ${new Date(checkpointTime).toLocaleTimeString()})`
       : '';
-    text.textContent = `⚠️ Showing last known data${ageStr} — Live connection lost. Auto-reconnecting…`;
+    text.textContent = `Warning: Showing last known data${ageStr} - Live connection lost. Auto-reconnecting...`;
   } else if (mode === 'OFFLINE') {
     banner.classList.add('mode-offline');
-    text.textContent = '🔴 OFFLINE — Cannot reach backend. Check that the server is running.';
+    text.textContent = 'OFFLINE - Cannot reach backend. Check that the server is running.';
   } else {
     banner.classList.add('mode-error');
-    text.textContent = '🔴 ERROR — Backend encountered an error. Last known data may be stale.';
+    text.textContent = 'ERROR - Backend encountered an error. Last known data may be stale.';
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Update the connection status indicator in the header
-// States: 'live', 'last_known', 'offline', 'error'
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Connection Status Dot
+// =================================================================
 function setConnectionStatus(state) {
   const dot  = document.getElementById('connection-dot');
   const text = document.getElementById('connection-text');
   if (!dot || !text) return;
-
   if (state === 'live') {
-    dot.className  = 'connection-dot connected';
+    dot.className    = 'connection-dot connected';
     text.textContent = '● Live';
   } else if (state === 'last_known') {
-    dot.className  = 'connection-dot warning';
+    dot.className    = 'connection-dot warning';
     text.textContent = '⚠ Last Known';
   } else {
-    dot.className  = 'connection-dot error';
+    dot.className    = 'connection-dot error';
     text.textContent = state === 'offline' ? '✕ Offline' : '✕ Error';
   }
 }
 
-
-// ─────────────────────────────────────────────────────────────────
-// Update the weather strip at the top of the dashboard
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Weather Strip
+// =================================================================
 function updateWeatherStrip(weather) {
-  const strip   = document.getElementById('weather-strip');
-  const icon    = document.getElementById('weather-icon');
-  const msg     = document.getElementById('weather-message');
-  const sub     = document.getElementById('weather-sub');
-  const tempEl  = document.getElementById('weather-temp');
-  const descEl  = document.getElementById('weather-desc');
+  const strip  = document.getElementById('weather-strip');
+  const icon   = document.getElementById('weather-icon');
+  const msg    = document.getElementById('weather-message');
+  const sub    = document.getElementById('weather-sub');
+  const tempEl = document.getElementById('weather-temp');
+  const descEl = document.getElementById('weather-desc');
 
   if (!weather || !weather.available) {
     strip.className = 'weather-strip';
-    icon.textContent = '🌡️';
+    icon.textContent = 'thermometer';
     msg.textContent = 'Weather data unavailable';
     sub.textContent = 'Add your OpenWeatherMap API key in backend/.env to enable this';
-    if (tempEl) tempEl.textContent = '—';
-    if (descEl) descEl.textContent = '—';
+    if (tempEl) tempEl.textContent = '-';
+    if (descEl) descEl.textContent = '-';
     return;
   }
-
   if (weather.rainExpected) {
     strip.className = 'weather-strip rain';
-    icon.textContent = '🌧️';
-    msg.textContent = 'Rain is expected – Automatic irrigation is paused';
+    icon.textContent = 'rain';
+    msg.textContent = 'Rain is expected - Automatic irrigation is paused';
     sub.textContent = `Forecast: ${weather.description || 'Rain'} · Expected rainfall: ${weather.maxRainMm || 0} mm`;
   } else {
     strip.className = 'weather-strip clear';
-    icon.textContent = '☀️';
-    msg.textContent = 'No rain expected – Automatic irrigation is active';
+    icon.textContent = 'sun';
+    msg.textContent = 'No rain expected - Automatic irrigation is active';
     sub.textContent = `Forecast: ${weather.description || 'Clear'} · ${weather.city || ''}`;
   }
-
-  if (tempEl) tempEl.textContent = weather.temperature !== null && weather.temperature !== undefined ? `${weather.temperature}°C` : '—';
-  if (descEl) descEl.textContent = weather.description ? capitalize(weather.description) : '—';
+  if (tempEl) tempEl.textContent = weather.temperature !== null && weather.temperature !== undefined ? `${weather.temperature}°C` : '-';
+  if (descEl) descEl.textContent = weather.description ? capitalize(weather.description) : '-';
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Update a single node card
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Node Card Updater
+// =================================================================
 function updateNodeCard(node, weather) {
   const card = document.getElementById(`node-card-${node.node}`);
   if (!card) return;
 
-  const moisture    = node.moisture;
-  const status      = node.status;       // 'OK', 'DRY', 'NO DATA'
-  const irrigating  = node.irrigationOn;
-  const updatedAt   = node.updatedAt;
+  const moisture   = node.moisture;
+  const status     = node.status;       // 'OK', 'DRY', 'NO DATA'
+  const irrigating = node.irrigationOn;
+  const updatedAt  = node.updatedAt;
 
-  // ── Card state class ────────────────────────────────────────
+  // Card state class
   card.className = 'node-card';
-  if (irrigating) {
-    card.classList.add('state-irrigating');
-  } else if (status === 'DRY') {
-    card.classList.add('state-dry');
-  } else if (status === 'OK') {
-    card.classList.add('state-ok');
-  } else {
-    card.classList.add('state-nodata');
-  }
+  if (irrigating)         card.classList.add('state-irrigating');
+  else if (status==='DRY') card.classList.add('state-dry');
+  else if (status==='OK')  card.classList.add('state-ok');
+  else                     card.classList.add('state-nodata');
 
-  // ── Moisture value ──────────────────────────────────────────
+  // Moisture value
   const moistureEl = card.querySelector('.moisture-value');
   if (moisture !== null) {
     moistureEl.textContent = Math.round(moisture);
     moistureEl.style.color = irrigating ? 'var(--blue)' : (status === 'DRY' ? 'var(--red)' : 'var(--green)');
   } else {
-    moistureEl.textContent = '—';
+    moistureEl.textContent = '-';
     moistureEl.style.color = 'var(--text-muted)';
   }
 
-  // ── Progress bar fill ───────────────────────────────────────
+  // Progress bar
   const bar = card.querySelector('.moisture-bar-fill');
   const pct = moisture !== null ? Math.min(100, Math.max(0, moisture)) : 0;
   bar.style.width = `${pct}%`;
   bar.className = 'moisture-bar-fill';
-  if (irrigating)     bar.classList.add('irrigating');
-  else if (status === 'DRY') bar.classList.add('dry');
+  if (irrigating)          bar.classList.add('irrigating');
+  else if (status==='DRY') bar.classList.add('dry');
 
-  // ── Status badge ────────────────────────────────────────────
+  // Status badge
   const badge = card.querySelector('.node-status-badge');
   badge.className = 'node-status-badge';
   if (status === 'OK') {
-    badge.textContent = '✅ OK';
+    badge.textContent = 'OK';
     badge.classList.add('badge-ok');
   } else if (status === 'DRY') {
-    badge.textContent = '🔴 DRY';
+    badge.textContent = 'DRY';
     badge.classList.add('badge-dry');
   } else {
-    badge.textContent = '⬜ No Data';
+    badge.textContent = 'No Data';
     badge.classList.add('badge-nodata');
   }
 
-  // ── Irrigation row ──────────────────────────────────────────
+  // Irrigation button
   const irrRow   = card.querySelector('.irrigation-row');
   const irrValue = card.querySelector('.irrigation-value');
   if (irrigating) {
     irrRow.classList.add('active');
-    irrValue.textContent = '💧 ON';
+    irrValue.textContent = 'ON';
     irrValue.className = 'irrigation-value irr-on';
   } else {
     irrRow.classList.remove('active');
@@ -234,7 +270,7 @@ function updateNodeCard(node, weather) {
     irrValue.className = 'irrigation-value irr-off';
   }
 
-  // ── Last updated ────────────────────────────────────────────
+  // Last updated
   const lastUpdatedEl = card.querySelector('.last-updated');
   if (updatedAt) {
     const d = new Date(updatedAt);
@@ -244,23 +280,35 @@ function updateNodeCard(node, weather) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Update the settings form fields (only if user is not editing)
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Settings Field Updater (called on data refresh - only when not editing)
+// =================================================================
 let userIsEditing = false;
 
 function updateSettingsFields(settings) {
   if (userIsEditing) return;
-  const fields = ['cropType', 'soilType', 'growthStage', 'city', 'state'];
-  for (const field of fields) {
+
+  // Simple dropdowns: cropType, soilType, growthStage
+  ['cropType', 'soilType', 'growthStage'].forEach(field => {
     const el = document.getElementById(`setting-${field}`);
     if (el && settings[field]) el.value = settings[field];
+  });
+
+  // State dropdown
+  const stateEl = document.getElementById('setting-state');
+  if (stateEl && settings.state && stateEl.value !== settings.state) {
+    stateEl.value = settings.state;
+    onStateChange(); // repopulate city dropdown
   }
+
+  // City dropdown (after state cities are loaded)
+  const cityEl = document.getElementById('setting-city');
+  if (cityEl && settings.city) cityEl.value = settings.city;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Save settings to backend
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Save Settings to Backend
+// =================================================================
 async function saveSettings() {
   const settings = {
     cropType:    document.getElementById('setting-cropType').value,
@@ -269,6 +317,11 @@ async function saveSettings() {
     city:        document.getElementById('setting-city').value,
     state:       document.getElementById('setting-state').value,
   };
+
+  if (!settings.city || !settings.state) {
+    alert('Please select both a State and a City before saving.');
+    return;
+  }
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/settings`, {
@@ -280,42 +333,41 @@ async function saveSettings() {
     const msg = document.getElementById('settings-save-msg');
     msg.classList.add('visible');
     setTimeout(() => msg.classList.remove('visible'), 2500);
+    // Immediately fetch to get updated weather for new location
+    setTimeout(fetchAndUpdate, 500);
   } catch (err) {
     console.error('Could not save settings:', err);
     alert('Could not save settings. Is the backend running?');
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Toggle the settings panel open/closed
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Toggle Settings Panel
+// =================================================================
 function toggleSettings() {
-  const body = document.getElementById('settings-body');
-  const icon = document.getElementById('settings-toggle-icon');
+  const body  = document.getElementById('settings-body');
+  const icon  = document.getElementById('settings-toggle-icon');
   const isOpen = body.classList.contains('open');
   body.classList.toggle('open', !isOpen);
   icon.classList.toggle('open', !isOpen);
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Utility: Capitalize first letter of a string
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Utility
+// =================================================================
 function capitalize(str) {
   if (!str) return '';
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Manual Valve Toggle
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// Individual Valve Toggle
+// =================================================================
 async function toggleValve(nodeId) {
-  // Get current state from the button text
   const card = document.getElementById(`node-card-${nodeId}`);
-  const btn = card.querySelector('.irrigation-value');
-  const isCurrentlyOn = btn.textContent.includes('ON');
-  
-  // If it's ON, turn it OFF. If it's OFF, turn it ON.
-  const newState = isCurrentlyOn ? 'OFF' : 'ON'; 
+  const btn  = card.querySelector('.irrigation-value');
+  const isCurrentlyOn = btn.textContent.trim() === 'ON';
+  const newState = isCurrentlyOn ? 'OFF' : 'ON';
 
   try {
     const response = await fetch(`${BACKEND_URL}/api/toggle-valve`, {
@@ -323,10 +375,8 @@ async function toggleValve(nodeId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ node: nodeId, state: newState }),
     });
-    
     if (response.ok) {
-      // Immediately fetch fresh data so the animation triggers instantly
-      fetchAndUpdate(); 
+      fetchAndUpdate();
     }
   } catch (err) {
     console.error('Failed to toggle valve:', err);
@@ -334,15 +384,52 @@ async function toggleValve(nodeId) {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
+// ALL ON / ALL OFF - Global Control
+// Calls /api/toggle-all to set override on all 4 nodes at once.
+// This goes through the same backend override pathway as individual toggles.
+// =================================================================
+async function toggleAll(state) {
+  // Immediately disable buttons to prevent double-click
+  const btnOn  = document.getElementById('btn-all-on');
+  const btnOff = document.getElementById('btn-all-off');
+  if (btnOn)  btnOn.disabled  = true;
+  if (btnOff) btnOff.disabled = true;
+
+  try {
+    const response = await fetch(`${BACKEND_URL}/api/toggle-all`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ state }),
+    });
+    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    // Immediately refresh all node cards
+    await fetchAndUpdate();
+  } catch (err) {
+    console.error('Failed to toggle all valves:', err);
+    alert('Could not connect to backend to toggle all valves.');
+  } finally {
+    if (btnOn)  btnOn.disabled  = false;
+    if (btnOff) btnOff.disabled = false;
+  }
+}
+
+// =================================================================
 // STARTUP: Run immediately and then every 10 seconds
-// ─────────────────────────────────────────────────────────────────
+// =================================================================
 document.addEventListener('DOMContentLoaded', () => {
   // Mark as editing when user focuses any settings field
   document.querySelectorAll('.settings-field input, .settings-field select').forEach(el => {
     el.addEventListener('focus', () => { userIsEditing = true; });
     el.addEventListener('blur',  () => { userIsEditing = false; });
   });
+
+  // Populate default city dropdown for Delhi on startup
+  const stateEl = document.getElementById('setting-state');
+  if (stateEl) {
+    stateEl.value = 'Delhi';
+    onStateChange();
+  }
 
   // Initial fetch
   fetchAndUpdate();

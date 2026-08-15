@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -26,8 +26,6 @@
       </div>
     </div>
     <div class="header-right">
-      <!-- MOCK badge – shown only when MOCK_MODE=true on backend -->
-      <span id="mock-badge" class="mock-badge">🧪 MOCK MODE</span>
       <!-- Live connection indicator -->
       <div class="connection-status">
         <div id="connection-dot" class="connection-dot"></div>
@@ -68,7 +66,7 @@
       </div>
     </div>
 
-    <!-- ── Legend ─────────────────────────────────────────── -->
+    <!-- ── Legend + Global Controls ─────────────────────── -->
     <div class="legend">
       <span class="legend-title">Guide:</span>
       <div class="legend-item">
@@ -86,6 +84,17 @@
       <div style="margin-left:auto; font-size:0.78rem; color:var(--text-muted);">
         Threshold: <strong id="threshold-display">—</strong> moisture level
       </div>
+    </div>
+
+    <!-- ── Global ALL ON / ALL OFF Controls ──────────────── -->
+    <div class="global-controls">
+      <span class="global-controls-label">All Valves:</span>
+      <button class="global-btn global-btn-on" id="btn-all-on" onclick="toggleAll('ON')">
+        💧 ALL ON
+      </button>
+      <button class="global-btn global-btn-off" id="btn-all-off" onclick="toggleAll('OFF')">
+        ⛔ ALL OFF
+      </button>
     </div>
 
     <!-- ── Section: Sensor Nodes ──────────────────────────── -->
@@ -123,7 +132,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" onclick="toggleValve(1)">OFF</button>
+          <button class="irrigation-value irr-off" id="valve-btn-1" onclick="toggleValve(1)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -159,7 +168,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" onclick="toggleValve(2)">OFF</button>
+          <button class="irrigation-value irr-off" id="valve-btn-2" onclick="toggleValve(2)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -195,7 +204,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" onclick="toggleValve(3)">OFF</button>
+          <button class="irrigation-value irr-off" id="valve-btn-3" onclick="toggleValve(3)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -231,7 +240,7 @@
             <span class="irrigation-icon">💧</span>
             Irrigation valve
           </div>
-          <button class="irrigation-value irr-off" onclick="toggleValve(4)">OFF</button>
+          <button class="irrigation-value irr-off" id="valve-btn-4" onclick="toggleValve(4)">OFF</button>
         </div>
 
         <div class="last-updated">No data received yet</div>
@@ -291,14 +300,49 @@
             </select>
           </div>
 
-          <div class="settings-field">
-            <label for="setting-city">City</label>
-            <input id="setting-city" type="text" placeholder="e.g. Delhi" value="Delhi" />
-          </div>
-
+          <!-- State dropdown – All 29 States of India (appears BEFORE City) -->
           <div class="settings-field">
             <label for="setting-state">State</label>
-            <input id="setting-state" type="text" placeholder="e.g. Delhi" value="Delhi" />
+            <select id="setting-state" onchange="onStateChange()">
+              <option value="">-- Select State --</option>
+              <option value="Andhra Pradesh">Andhra Pradesh</option>
+              <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+              <option value="Assam">Assam</option>
+              <option value="Bihar">Bihar</option>
+              <option value="Chhattisgarh">Chhattisgarh</option>
+              <option value="Goa">Goa</option>
+              <option value="Gujarat">Gujarat</option>
+              <option value="Haryana">Haryana</option>
+              <option value="Himachal Pradesh">Himachal Pradesh</option>
+              <option value="Jharkhand">Jharkhand</option>
+              <option value="Karnataka">Karnataka</option>
+              <option value="Kerala">Kerala</option>
+              <option value="Madhya Pradesh">Madhya Pradesh</option>
+              <option value="Maharashtra">Maharashtra</option>
+              <option value="Manipur">Manipur</option>
+              <option value="Meghalaya">Meghalaya</option>
+              <option value="Mizoram">Mizoram</option>
+              <option value="Nagaland">Nagaland</option>
+              <option value="Odisha">Odisha</option>
+              <option value="Punjab">Punjab</option>
+              <option value="Rajasthan">Rajasthan</option>
+              <option value="Sikkim">Sikkim</option>
+              <option value="Tamil Nadu">Tamil Nadu</option>
+              <option value="Telangana">Telangana</option>
+              <option value="Tripura">Tripura</option>
+              <option value="Uttar Pradesh">Uttar Pradesh</option>
+              <option value="Uttarakhand">Uttarakhand</option>
+              <option value="West Bengal">West Bengal</option>
+              <option value="Delhi">Delhi</option>
+            </select>
+          </div>
+
+          <!-- City dropdown – populated dynamically based on selected State -->
+          <div class="settings-field">
+            <label for="setting-city">City</label>
+            <select id="setting-city">
+              <option value="">-- Select State first --</option>
+            </select>
           </div>
 
         </div>

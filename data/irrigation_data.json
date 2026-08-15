@@ -1,51 +1,51 @@
 {
-  "timestamp": "2026-08-15T05:57:46.735Z",
+  "timestamp": "2026-08-15T06:52:17.268Z",
   "dataSource": "MOCK",
-  "threshold": 40,
+  "threshold": 65,
   "weather": {
     "available": true,
     "rainExpected": true,
-    "temperature": 31,
+    "temperature": 32,
     "description": "light rain",
     "city": "Delhi",
-    "maxRainMm": 1.3
+    "maxRainMm": 0.4
   },
   "nodes": {
     "node1": {
       "nodeId": 1,
       "masterId": 1,
-      "moisture": 26,
+      "moisture": 30,
       "status": "DRY",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T05:57:46.735Z"
+      "updatedAt": "2026-08-15T06:52:17.267Z"
     },
     "node2": {
       "nodeId": 2,
       "masterId": 1,
-      "moisture": 59,
-      "status": "OK",
+      "moisture": 58,
+      "status": "DRY",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T05:57:46.735Z"
+      "updatedAt": "2026-08-15T06:52:17.267Z"
     },
     "node3": {
       "nodeId": 3,
       "masterId": 2,
-      "moisture": 37,
+      "moisture": 42,
       "status": "DRY",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T05:57:46.735Z"
+      "updatedAt": "2026-08-15T06:52:17.267Z"
     },
     "node4": {
       "nodeId": 4,
       "masterId": 2,
-      "moisture": 72,
+      "moisture": 74,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T05:57:46.735Z"
+      "updatedAt": "2026-08-15T06:52:17.267Z"
     }
   }
 }
