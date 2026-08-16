@@ -143,6 +143,11 @@ async function fetchAndUpdate() {
       updateSettingsFields(data.farmSettings);
     }
 
+    // Update Live Charts
+    if (typeof updateChartsLive === 'function') {
+      try { updateChartsLive(data.nodes); } catch (e) { console.error('Chart update error:', e); }
+    }
+
     // Update threshold display
     const thresholdEl = document.getElementById('threshold-display');
     if (thresholdEl) thresholdEl.textContent = `${data.threshold}%`;
@@ -529,7 +534,187 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial fetch - this will call updateSettingsFields which runs
   // the FIRST-LOAD sync of location dropdowns from backend state
   fetchAndUpdate();
+  fetchHistory(); // Fetch initial chart data
 
   // Refresh every 10 seconds
   setInterval(fetchAndUpdate, REFRESH_INTERVAL_MS);
 });
+
+// =================================================================
+// Sensor Analytics (Charts)
+// =================================================================
+let charts = { moisture: null, ml: null, irrigation: null };
+let historyData = [];
+
+// Common Chart.js options for dark theme
+const chartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  color: '#eef0f8',
+  plugins: {
+    legend: { labels: { color: '#eef0f8', font: { family: 'Inter' } } }
+  },
+  scales: {
+    x: { ticks: { color: '#8a8fa8', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+    y: { ticks: { color: '#8a8fa8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+  }
+};
+
+async function fetchHistory() {
+  const nodeSelect = document.getElementById('analytics-node-select').value;
+  const range = document.getElementById('analytics-range-select').value;
+  const [master, node] = nodeSelect.split('-');
+  
+  const emptyState = document.getElementById('analytics-empty-state');
+  const chartsContainer = document.getElementById('analytics-charts-container');
+  
+  emptyState.style.display = 'block';
+  emptyState.textContent = 'Loading sensor history...';
+  chartsContainer.style.display = 'none';
+
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/history?master=${master}&node=${node}&range=${range}`);
+    if (!res.ok) throw new Error('Failed to fetch history');
+    const data = await res.json();
+    historyData = data;
+    
+    if (data.length === 0) {
+      emptyState.style.display = 'block';
+      emptyState.textContent = 'No historical data available for this range.';
+      chartsContainer.style.display = 'none';
+    } else {
+      emptyState.style.display = 'none';
+      chartsContainer.style.display = 'grid';
+      renderCharts(data);
+    }
+  } catch (err) {
+    console.error('History fetch error:', err);
+    emptyState.style.display = 'block';
+    emptyState.textContent = 'Failed to load sensor history.';
+    chartsContainer.style.display = 'none';
+  }
+}
+
+function renderCharts(data) {
+  // Format labels: HH:MM for 24h, MM/DD HH:MM for 7d/30d
+  const range = document.getElementById('analytics-range-select').value;
+  const labels = data.map(d => {
+    const date = new Date(d.timestamp);
+    if (range === '24h') return date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    return date.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  });
+  
+  // 1. Moisture History
+  const ctxMoisture = document.getElementById('chart-moisture');
+  if (charts.moisture) charts.moisture.destroy();
+  charts.moisture = new Chart(ctxMoisture, {
+    type: 'line',
+    data: {
+      labels: [...labels],
+      datasets: [{
+        label: 'Soil Moisture (%)',
+        data: data.map(d => d.moisture),
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        fill: true,
+        tension: 0.2,
+        pointRadius: data.length > 50 ? 0 : 3
+      }]
+    },
+    options: Object.assign({}, chartOptions, {
+      plugins: { title: { display: true, text: 'Soil Moisture History', color: '#eef0f8', font: { size: 14 } } }
+    })
+  });
+
+  // 2. Actual vs ML
+  const ctxMl = document.getElementById('chart-ml');
+  if (charts.ml) charts.ml.destroy();
+  charts.ml = new Chart(ctxMl, {
+    type: 'line',
+    data: {
+      labels: [...labels],
+      datasets: [
+        {
+          label: 'Actual Moisture',
+          data: data.map(d => d.moisture),
+          borderColor: '#3b82f6',
+          tension: 0.2,
+          pointRadius: data.length > 50 ? 0 : 3
+        },
+        {
+          label: 'Predicted Moisture (ML)',
+          data: data.map(d => d.predictedMoisture),
+          borderColor: '#f59e0b',
+          borderDash: [5, 5],
+          tension: 0.2,
+          spanGaps: false,
+          pointRadius: data.length > 50 ? 0 : 3
+        }
+      ]
+    },
+    options: Object.assign({}, chartOptions, {
+      plugins: { title: { display: true, text: 'Actual vs ML Predicted', color: '#eef0f8', font: { size: 14 } } }
+    })
+  });
+
+  // 3. Irrigation Activity
+  const ctxIrrigation = document.getElementById('chart-irrigation');
+  if (charts.irrigation) charts.irrigation.destroy();
+  charts.irrigation = new Chart(ctxIrrigation, {
+    type: 'line',
+    data: {
+      labels: [...labels],
+      datasets: [{
+        label: 'Irrigation Valve (1=ON, 0=OFF)',
+        data: data.map(d => d.irrigationOn ? 1 : 0),
+        borderColor: '#22c55e',
+        stepped: true,
+        fill: true,
+        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        pointRadius: 0
+      }]
+    },
+    options: Object.assign({}, chartOptions, {
+      plugins: { title: { display: true, text: 'Irrigation Activity', color: '#eef0f8', font: { size: 14 } } },
+      scales: {
+        x: chartOptions.scales.x,
+        y: { min: -0.1, max: 1.1, ticks: { stepSize: 1, color: '#8a8fa8' }, grid: { color: 'rgba(255,255,255,0.05)' } }
+      }
+    })
+  });
+}
+
+function updateChartsLive(nodesData) {
+  if (historyData.length === 0 || !charts.moisture) return;
+  const nodeSelect = document.getElementById('analytics-node-select').value;
+  const selectedNodeId = parseInt(nodeSelect.split('-')[1]);
+  
+  const liveNode = nodesData.find(n => n.node === selectedNodeId);
+  if (!liveNode || liveNode.moisture === null) return;
+  
+  const now = new Date();
+  const range = document.getElementById('analytics-range-select').value;
+  let timeLabel = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  if (range !== '24h') {
+    timeLabel = now.toLocaleDateString([], {month: 'short', day: 'numeric'}) + ' ' + timeLabel;
+  }
+  
+  // Append to datasets directly
+  const addData = (chart, dataPoints) => {
+    chart.data.labels.push(timeLabel);
+    chart.data.datasets.forEach((dataset, i) => {
+      dataset.data.push(dataPoints[i]);
+    });
+    // Keep max 500 points in view to prevent memory leak
+    if (chart.data.labels.length > 500) {
+      chart.data.labels.shift();
+      chart.data.datasets.forEach(dataset => dataset.data.shift());
+    }
+    chart.update('none'); // Update without animation
+  };
+
+  addData(charts.moisture, [liveNode.moisture]);
+  const predicted = (liveNode.ml && liveNode.ml.available) ? liveNode.ml.predictedMoisturePct : null;
+  addData(charts.ml, [liveNode.moisture, predicted]);
+  addData(charts.irrigation, [liveNode.irrigationOn ? 1 : 0]);
+}

@@ -1,0 +1,138 @@
+{
+  "1": [
+    {
+      "timestamp": "2026-08-16T15:33:46.798Z",
+      "masterId": 1,
+      "nodeId": 1,
+      "moisture": 20,
+      "predictedMoisture": 49.1,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:39:00.929Z",
+      "masterId": 1,
+      "nodeId": 1,
+      "moisture": 30,
+      "predictedMoisture": 49.1,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:44:01.138Z",
+      "masterId": 1,
+      "nodeId": 1,
+      "moisture": 25,
+      "predictedMoisture": 49.1,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:49:01.198Z",
+      "masterId": 1,
+      "nodeId": 1,
+      "moisture": 21,
+      "predictedMoisture": 49.1,
+      "irrigationOn": true
+    }
+  ],
+  "2": [
+    {
+      "timestamp": "2026-08-16T15:33:46.798Z",
+      "masterId": 1,
+      "nodeId": 2,
+      "moisture": 60,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:39:00.929Z",
+      "masterId": 1,
+      "nodeId": 2,
+      "moisture": 66,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    },
+    {
+      "timestamp": "2026-08-16T15:44:01.138Z",
+      "masterId": 1,
+      "nodeId": 2,
+      "moisture": 58,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:49:01.198Z",
+      "masterId": 1,
+      "nodeId": 2,
+      "moisture": 60,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    }
+  ],
+  "3": [
+    {
+      "timestamp": "2026-08-16T15:33:46.798Z",
+      "masterId": 2,
+      "nodeId": 3,
+      "moisture": 38,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:39:00.929Z",
+      "masterId": 2,
+      "nodeId": 3,
+      "moisture": 37,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:44:01.138Z",
+      "masterId": 2,
+      "nodeId": 3,
+      "moisture": 38,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-16T15:49:01.198Z",
+      "masterId": 2,
+      "nodeId": 3,
+      "moisture": 35,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    }
+  ],
+  "4": [
+    {
+      "timestamp": "2026-08-16T15:33:46.798Z",
+      "masterId": 2,
+      "nodeId": 4,
+      "moisture": 67,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    },
+    {
+      "timestamp": "2026-08-16T15:39:00.929Z",
+      "masterId": 2,
+      "nodeId": 4,
+      "moisture": 72,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    },
+    {
+      "timestamp": "2026-08-16T15:44:01.138Z",
+      "masterId": 2,
+      "nodeId": 4,
+      "moisture": 74,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    },
+    {
+      "timestamp": "2026-08-16T15:49:01.198Z",
+      "masterId": 2,
+      "nodeId": 4,
+      "moisture": 67,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    }
+  ]
+}

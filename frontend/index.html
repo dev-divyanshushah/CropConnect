@@ -10,6 +10,8 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/svg+xml"
     href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
+  <!-- Chart.js for Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
@@ -263,6 +265,38 @@
       </div>
 
     </div><!-- /nodes-grid -->
+
+    <!-- ── Sensor Analytics Section ────────────────────────────── -->
+    <div class="analytics-panel">
+      <div class="analytics-header">
+        <div class="analytics-title">📊 Sensor Analytics</div>
+        <div class="analytics-controls">
+          <select id="analytics-node-select" onchange="fetchHistory()">
+            <option value="1-1">Sector 1 (Node 1 - Master 1)</option>
+            <option value="1-2">Sector 2 (Node 2 - Master 1)</option>
+            <option value="2-3">Sector 3 (Node 3 - Master 2)</option>
+            <option value="2-4">Sector 4 (Node 4 - Master 2)</option>
+          </select>
+          <select id="analytics-range-select" onchange="fetchHistory()">
+            <option value="24h">Last 24 Hours</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days</option>
+          </select>
+        </div>
+      </div>
+      <div id="analytics-empty-state" class="analytics-empty-state">Loading sensor history...</div>
+      <div id="analytics-charts-container" class="analytics-charts-container" style="display: none;">
+        <div class="chart-wrapper">
+          <canvas id="chart-moisture"></canvas>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-ml"></canvas>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="chart-irrigation"></canvas>
+        </div>
+      </div>
+    </div>
 
     <!-- ── Farm Settings Panel ────────────────────────────── -->
     <div class="settings-panel">

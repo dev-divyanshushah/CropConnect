@@ -55,10 +55,12 @@ const MONGODB_URI           = process.env.MONGODB_URI || '';
 const GITHUB_AUTO_PUSH      = process.env.GITHUB_AUTO_PUSH === 'true';
 const GIT_PUSH_INTERVAL_MIN = parseInt(process.env.GIT_PUSH_INTERVAL_MINUTES) || 30;
 const JSON_SNAPSHOT_PATH    = process.env.JSON_SNAPSHOT_PATH || '../data/irrigation_data.json';
+const GRAPH_DATA_PATH       = process.env.GRAPH_DATA_PATH || '../data/graph_data.json';
 const ML_API_URL            = process.env.ML_API_URL || 'http://localhost:8000';
 
-// Resolve snapshot path relative to this file's directory
+// Resolve paths relative to this file's directory
 const SNAPSHOT_FILE = path.resolve(__dirname, JSON_SNAPSHOT_PATH);
+const GRAPH_FILE    = path.resolve(__dirname, GRAPH_DATA_PATH);
 
 function isWeatherConfigured() {
   return OPENWEATHER_API_KEY && OPENWEATHER_API_KEY !== 'your_openweathermap_api_key_here';
@@ -109,6 +111,7 @@ async function connectMongoDB() {
       nodeId:       { type: Number, required: true, index: true },
       masterId:     { type: Number, required: true },
       moisture:     { type: Number, required: true },
+      predictedMoisture: { type: Number, default: null },
       status:       { type: String },
       irrigationOn: { type: Boolean },
       override:     { type: String, default: null },
@@ -176,6 +179,182 @@ let farmSettings = {
 
 // Weather cache (10-minute TTL)
 let weatherCache = { data: null, fetchedAt: null };
+
+// ==============================================================
+// SECTION 2.5 – HISTORICAL MOISTURE CACHE
+// ==============================================================
+//
+// PURPOSE:
+//   ESP8266 sends many readings per day (e.g. every 10 seconds).
+//   We must NOT treat each reading as a separate "day".
+//   Instead:
+//     1. Accumulate intra-day readings into a dayReadings buffer.
+//     2. When a new calendar date is detected, finalise the
+//        previous day's average and append it to completedDays
+//        (kept at most MAX_HISTORY_DAYS = 7 entries).
+//     3. getMLFeatures() derives lag1/lag3/lag7/roll7_mean from
+//        completedDays – ONLY when >= 7 completed days exist.
+//        Returns null otherwise so ML stays disabled.
+//     4. Moisture is stored as a FRACTION (0–1), matching the
+//        V2 training dataset (ESP8266 % values ÷ 100).
+//     5. History is kept SEPARATE per node; nodes never mix.
+//     6. The cache is persisted inside the JSON snapshot so a
+//        server restart does not destroy accumulated history.
+//
+// DATA SHAPE per node:
+//   currentDay   – "YYYY-MM-DD" of the day currently accumulating
+//   dayReadings  – [0.32, 0.31, …]  fractions received today
+//   completedDays – [{date:"YYYY-MM-DD", avg:0.31}, …]  max 7
+// ==============================================================
+
+const MAX_HISTORY_DAYS = 7;   // completed days needed before ML activates
+
+// One slot per node (keyed by integer node ID)
+let moistureHistoryCache = {
+  1: { currentDay: null, dayReadings: [], completedDays: [] },
+  2: { currentDay: null, dayReadings: [], completedDays: [] },
+  3: { currentDay: null, dayReadings: [], completedDays: [] },
+  4: { currentDay: null, dayReadings: [], completedDays: [] },
+};
+
+// ==============================================================
+// SECTION 2.6 – GRAPH HISTORY CACHE (Fallback)
+// ==============================================================
+let graphHistoryCache = { 1: [], 2: [], 3: [], 4: [] };
+const MAX_GRAPH_POINTS = 1000;
+
+function loadGraphHistory() {
+  try {
+    if (!fs.existsSync(GRAPH_FILE)) return;
+    const data = JSON.parse(fs.readFileSync(GRAPH_FILE, 'utf8'));
+    if (data && typeof data === 'object') {
+      for (const nodeId of [1, 2, 3, 4]) {
+        if (Array.isArray(data[nodeId])) {
+          graphHistoryCache[nodeId] = data[nodeId];
+        }
+      }
+      console.log('HISTORY: Loaded graph cache from ' + GRAPH_FILE);
+    }
+  } catch (err) {
+    console.warn('HISTORY: Could not load graph cache (will start fresh): ' + err.message);
+  }
+}
+
+function saveGraphHistory() {
+  try {
+    const dir = path.dirname(GRAPH_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(GRAPH_FILE, JSON.stringify(graphHistoryCache, null, 2), 'utf8');
+  } catch (err) {
+    console.error('WARN: Failed to save graph history: ' + err.message);
+  }
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+
+function getTodayDateStr() {
+  return new Date().toISOString().slice(0, 10);  // "YYYY-MM-DD"
+}
+
+/**
+ * Called every time a validated sensor reading arrives.
+ * moisturePct is 0–100 (integer from ESP8266).
+ * Converts to fraction and accumulates into the current-day buffer.
+ * When the calendar date changes, finalises the completed day and
+ * slides the window.
+ */
+function recordMoistureReading(nodeId, moisturePct) {
+  const fraction = moisturePct / 100;
+  const today    = getTodayDateStr();
+  const cache    = moistureHistoryCache[nodeId];
+  if (!cache) return;  // unknown node – ignore
+
+  if (cache.currentDay === null) {
+    // Very first reading ever for this node
+    cache.currentDay  = today;
+    cache.dayReadings = [fraction];
+    console.log('HISTORY [Node ' + nodeId + ']: First reading received – accumulating day ' + today);
+
+  } else if (cache.currentDay === today) {
+    // Same calendar day – just accumulate
+    cache.dayReadings.push(fraction);
+
+  } else {
+    // New calendar day detected – finalise the previous day
+    const avg = cache.dayReadings.reduce((a, b) => a + b, 0) / cache.dayReadings.length;
+    const entry = { date: cache.currentDay, avg: parseFloat(avg.toFixed(6)) };
+    cache.completedDays.push(entry);
+
+    // Keep only the last MAX_HISTORY_DAYS entries (sliding window)
+    if (cache.completedDays.length > MAX_HISTORY_DAYS) {
+      cache.completedDays = cache.completedDays.slice(-MAX_HISTORY_DAYS);
+    }
+
+    console.log('HISTORY [Node ' + nodeId + ']: Day ' + cache.currentDay +
+      ' finalised – avg=' + avg.toFixed(4) +
+      ' | completed days=' + cache.completedDays.length + '/' + MAX_HISTORY_DAYS);
+
+    // Start fresh accumulation for today
+    cache.currentDay  = today;
+    cache.dayReadings = [fraction];
+  }
+}
+
+/**
+ * Returns { lag1, lag3, lag7, roll7_mean } derived from the sliding
+ * window of completed daily averages, or null if < 7 days exist.
+ *
+ * Window layout (oldest → newest, 7 entries):
+ *   completedDays[0] = 7 days ago  → lag7
+ *   completedDays[2] = 5 days ago  (unused)
+ *   completedDays[4] = 3 days ago  → lag3
+ *   completedDays[6] = yesterday   → lag1
+ *   roll7_mean = mean of all 7 entries
+ *
+ * IMPORTANT: the current day's buffer is NOT included.
+ */
+function getMLFeatures(nodeId) {
+  const cache = moistureHistoryCache[nodeId];
+  if (!cache || cache.completedDays.length < MAX_HISTORY_DAYS) return null;
+
+  const days       = cache.completedDays.slice(-MAX_HISTORY_DAYS);  // exactly 7
+  const lag1       = days[6].avg;  // yesterday
+  const lag3       = days[4].avg;  // 3 days ago
+  const lag7       = days[0].avg;  // 7 days ago
+  const roll7_mean = parseFloat(
+    (days.reduce((s, d) => s + d.avg, 0) / days.length).toFixed(6)
+  );
+  return { lag1, lag3, lag7, roll7_mean };
+}
+
+/**
+ * Restore the history cache from the JSON snapshot on startup.
+ * This ensures a server restart does not destroy accumulated
+ * daily averages – they are re-loaded from the persisted file.
+ */
+function loadHistoryFromSnapshot() {
+  try {
+    if (!fs.existsSync(SNAPSHOT_FILE)) return;
+    const raw  = fs.readFileSync(SNAPSHOT_FILE, 'utf8');
+    const data = JSON.parse(raw);
+    if (!data.historyCache) {
+      console.log('HISTORY: No history cache found in snapshot – starting fresh.');
+      return;
+    }
+    let totalDays = 0;
+    for (const nodeId of [1, 2, 3, 4]) {
+      const saved = data.historyCache[nodeId] || data.historyCache[String(nodeId)];
+      if (!saved) continue;
+      moistureHistoryCache[nodeId].completedDays = Array.isArray(saved.completedDays) ? saved.completedDays : [];
+      moistureHistoryCache[nodeId].currentDay    = saved.currentDay  || null;
+      moistureHistoryCache[nodeId].dayReadings   = Array.isArray(saved.dayReadings)   ? saved.dayReadings   : [];
+      totalDays += moistureHistoryCache[nodeId].completedDays.length;
+    }
+    console.log('HISTORY: Loaded history from snapshot – total completed days across all nodes: ' + totalDays);
+  } catch (err) {
+    console.warn('HISTORY: Could not load history from snapshot (will start fresh): ' + err.message);
+  }
+}
 
 // ==============================================================
 // SECTION 3 - MOCK DATA GENERATOR
@@ -277,49 +456,93 @@ async function fetchWeather() {
 // ==============================================================
 
 async function fetchMLPrediction(nodeData) {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const diff = now - start;
-  const day_of_year = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const month = now.getMonth() + 1;
+  const now         = new Date();
+  const yearStart   = new Date(now.getFullYear(), 0, 0);
+  const day_of_year = Math.floor((now - yearStart) / (1000 * 60 * 60 * 24));
+  const month       = now.getMonth() + 1;
 
-  // 1. Soil Composition Mapping (Configured mapping, not raw sensor measurements)
+  // ── 1. Soil composition from farm settings (static config mapping) ────
   const soilCompositionMap = {
-    "Loamy": { clay_content: 20.0, sand_content: 40.0, silt_content: 40.0 },
-    "Clay":  { clay_content: 60.0, sand_content: 20.0, silt_content: 20.0 },
-    "Sandy": { clay_content: 10.0, sand_content: 80.0, silt_content: 10.0 }
+    'Loamy': { clay_content: 20.0, sand_content: 40.0, silt_content: 40.0 },
+    'Clay':  { clay_content: 60.0, sand_content: 20.0, silt_content: 20.0 },
+    'Sandy': { clay_content: 10.0, sand_content: 80.0, silt_content: 10.0 },
   };
-  const soilProps = soilCompositionMap[farmSettings.soilType] || soilCompositionMap["Loamy"];
+  const soilProps = soilCompositionMap[farmSettings.soilType] || soilCompositionMap['Loamy'];
 
-  // 2. Historical features check
-  // The backend does not yet maintain lag1, lag3, lag7, or roll7_mean.
-  // We MUST NOT use placeholders or fake values.
-  const hasHistory = false; // To be implemented in next phase
+  // ── 2. Historical lag features – derived from completed daily averages ─
+  //  NEVER uses fake values. Returns null if < 7 days of history exist.
+  const histFeatures    = getMLFeatures(nodeData.node);
+  const completedCount  = (moistureHistoryCache[nodeData.node] || {}).completedDays
+    ? moistureHistoryCache[nodeData.node].completedDays.length : 0;
 
-  if (!hasHistory) {
+  if (!histFeatures) {
+    console.log('ML [Node ' + nodeData.node + ']: UNAVAILABLE – insufficient history ('
+      + completedCount + '/' + MAX_HISTORY_DAYS + ' completed days). '
+      + 'Rule-based fallback active.');
     return {
-      available: false,
-      error: "Missing required historical ML features (lag1, lag3, lag7, roll7). ML disabled until history cache is implemented."
+      available:    false,
+      completedDays: completedCount,
+      error: 'Insufficient history: ' + completedCount + '/' + MAX_HISTORY_DAYS
+           + ' completed days. Rule-based irrigation active.',
     };
   }
 
-  // Future payload when history is implemented:
-  // const payload = {
-  //   clay_content: soilProps.clay_content,
-  //   sand_content: soilProps.sand_content,
-  //   silt_content: soilProps.silt_content,
-  //   sm_tgt_lag1: nodeData.history.lag1, 
-  //   sm_tgt_lag3: nodeData.history.lag3, 
-  //   sm_tgt_lag7: nodeData.history.lag7, 
-  //   sm_tgt_roll7_mean: nodeData.history.roll7,
-  //   month: month,
-  //   day_of_year: day_of_year
-  // };
+  // ── 3. Build FastAPI request payload ─────────────────────────────────
+  const payload = {
+    clay_content:      soilProps.clay_content,
+    sand_content:      soilProps.sand_content,
+    silt_content:      soilProps.silt_content,
+    sm_tgt_lag1:       histFeatures.lag1,
+    sm_tgt_lag3:       histFeatures.lag3,
+    sm_tgt_lag7:       histFeatures.lag7,
+    sm_tgt_roll7_mean: histFeatures.roll7_mean,
+    month,
+    day_of_year,
+  };
 
-  // try {
-  //   const response = await fetch(`${ML_API_URL}/predict`, { ... });
-  //   ...
-  // }
+  // ── 4. Call FastAPI ML service ────────────────────────────────────────
+  try {
+    console.log('ML [Node ' + nodeData.node + ']: Calling FastAPI – '
+      + 'lag1=' + histFeatures.lag1.toFixed(3)
+      + ' lag3=' + histFeatures.lag3.toFixed(3)
+      + ' lag7=' + histFeatures.lag7.toFixed(3)
+      + ' roll7=' + histFeatures.roll7_mean.toFixed(3));
+
+    const mlRes = await fetch(ML_API_URL + '/predict', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+      timeout: 5000,
+    });
+
+    if (!mlRes.ok) throw new Error('FastAPI HTTP ' + mlRes.status);
+
+    const result       = await mlRes.json();
+    const predFraction = result.predicted_soil_moisture;
+    const predPct      = Math.round(predFraction * 1000) / 10;  // one decimal (%)
+
+    console.log('ML [Node ' + nodeData.node + ']: ✓ Prediction = '
+      + predFraction.toFixed(4) + ' (' + predPct + '%)');
+
+    return {
+      available:            true,
+      predictedMoisture:    predFraction,
+      predictedMoisturePct: predPct,
+      model:                result.model || 'XGBoost',
+      lag1:                 histFeatures.lag1,
+      lag3:                 histFeatures.lag3,
+      lag7:                 histFeatures.lag7,
+      roll7_mean:           histFeatures.roll7_mean,
+    };
+
+  } catch (err) {
+    console.error('ML [Node ' + nodeData.node + ']: FastAPI call FAILED – '
+      + err.message + '. Rule-based fallback active.');
+    return {
+      available: false,
+      error: 'ML service unreachable: ' + err.message + '. Rule-based fallback active.',
+    };
+  }
 }
 
 // ==============================================================
@@ -408,6 +631,8 @@ async function writeJSONSnapshot(processedNodes, weather) {
         updatedAt: n.updatedAt,
       };
     }
+    // Persist the history cache so server restarts preserve daily averages
+    snapshot.historyCache = moistureHistoryCache;
     fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
     console.log('SNAP: JSON snapshot updated: ' + SNAPSHOT_FILE);
     return true;
@@ -474,6 +699,7 @@ async function saveToMongoDB(nodeData, irrigationOn, weather) {
       nodeId:       nodeData.node,
       masterId:     nodeData.master,
       moisture:     nodeData.moisture,
+      predictedMoisture: (nodeData.ml && nodeData.ml.available) ? nodeData.ml.predictedMoisturePct : null,
       status:       nodeData.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK',
       irrigationOn,
       override:     nodeData.override || null,
@@ -500,11 +726,34 @@ async function processAndSnapshot() {
   try {
     const weather        = await fetchWeather();
     const processedNodes = await buildProcessedNodes(weather);
+    let graphAppended = false;
     for (const n of processedNodes) {
       if (n.moisture !== null) {
-        await saveToMongoDB(sensorData[n.node], n.irrigationOn, weather);
+        await saveToMongoDB(n, n.irrigationOn, weather);
+        
+        // Append to graph cache (downsampled to 1 point every 5 mins)
+        const cache = graphHistoryCache[n.node];
+        const now = new Date();
+        let shouldAppend = cache.length === 0;
+        if (!shouldAppend) {
+          const lastPointTime = new Date(cache[cache.length - 1].timestamp);
+          if (now - lastPointTime >= 300000) shouldAppend = true;
+        }
+        if (shouldAppend) {
+          cache.push({
+            timestamp: now.toISOString(),
+            masterId: n.master,
+            nodeId: n.node,
+            moisture: n.moisture,
+            predictedMoisture: (n.ml && n.ml.available) ? n.ml.predictedMoisturePct : null,
+            irrigationOn: n.irrigationOn
+          });
+          if (cache.length > MAX_GRAPH_POINTS) cache.shift();
+          graphAppended = true;
+        }
       }
     }
+    if (graphAppended) saveGraphHistory();
     const snapshotOk = await writeJSONSnapshot(processedNodes, weather);
     if (snapshotOk) {
       saveCheckpoint(processedNodes, weather);
@@ -557,6 +806,9 @@ app.post('/api/sensor-data', async (req, res) => {
     updatedAt: new Date().toISOString(),
     override:  existing ? existing.override : null,
   };
+
+  // Update the per-node daily moisture history (accumulates into daily avg)
+  recordMoistureReading(node, moisture);
 
   console.log('DATA: Master=' + master + ' Node=' + node + ' Moisture=' + moisture + '%');
   if (MOCK_MODE) console.log('   WARN: MOCK mode is ON - real data accepted but mock timer still runs');
@@ -616,6 +868,54 @@ app.get('/api/weather', async (req, res) => {
     res.json(await fetchWeather());
   } catch (err) {
     res.status(503).json({ available: false, message: err.message });
+  }
+});
+
+// GET /api/history
+// Returns historical data for a specific master and node.
+app.get('/api/history', async (req, res) => {
+  const master = parseInt(req.query.master);
+  const node = parseInt(req.query.node);
+  const range = req.query.range || '24h';
+  
+  if (isNaN(master) || isNaN(node)) {
+    return res.status(400).json({ error: 'Valid master and node are required' });
+  }
+
+  let msAgo = 24 * 60 * 60 * 1000;
+  if (range === '7d') msAgo = 7 * 24 * 60 * 60 * 1000;
+  if (range === '30d') msAgo = 30 * 24 * 60 * 60 * 1000;
+  const since = new Date(Date.now() - msAgo);
+
+  try {
+    if (dbState.connected && SensorReading) {
+      const docs = await SensorReading.find({
+        nodeId: node,
+        masterId: master,
+        timestamp: { $gte: since }
+      }).sort({ timestamp: 1 }).lean();
+      
+      const results = docs.map(d => ({
+        timestamp: d.timestamp,
+        moisture: d.moisture,
+        predictedMoisture: d.predictedMoisture,
+        irrigationOn: d.irrigationOn
+      }));
+      
+      // Downsample to max ~500 points to prevent frontend lag
+      const downsampled = [];
+      const step = Math.ceil(results.length / 500);
+      for (let i = 0; i < results.length; i += step) {
+        downsampled.push(results[i]);
+      }
+      return res.json(downsampled);
+    } else {
+      const cache = graphHistoryCache[node] || [];
+      const results = cache.filter(p => new Date(p.timestamp) >= since && p.masterId === master);
+      return res.json(results);
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch history', details: err.message });
   }
 });
 
@@ -690,6 +990,115 @@ app.get('/api/snapshot', (req, res) => {
   }
 });
 
+// POST /api/dev/inject-history
+// ─────────────────────────────────────────────────────────────
+// DEVELOPMENT / TESTING ONLY – gated behind MOCK_MODE.
+// Directly loads a set of completed daily averages into the
+// in-memory history cache for a given node, enabling full
+// end-to-end ML testing without waiting 7 real days.
+//
+// Body: { nodeId: 1, completedDays: [{date:"YYYY-MM-DD", avg:0.31}, …] }
+//
+// WARNING: This endpoint is NEVER to be called in production.
+//          It is only reachable when MOCK_MODE=true.
+// ─────────────────────────────────────────────────────────────
+app.post('/api/dev/inject-history', (req, res) => {
+  if (!MOCK_MODE) {
+    return res.status(403).json({
+      error: 'This endpoint is only available in MOCK_MODE. Set MOCK_MODE=true in .env.',
+    });
+  }
+  const { nodeId, completedDays } = req.body || {};
+  const id = parseInt(nodeId);
+  if (!moistureHistoryCache[id]) {
+    return res.status(400).json({ error: 'Invalid nodeId: ' + nodeId });
+  }
+  if (!Array.isArray(completedDays) || completedDays.length === 0) {
+    return res.status(400).json({ error: 'completedDays must be a non-empty array.' });
+  }
+  for (const d of completedDays) {
+    if (typeof d.date !== 'string' || typeof d.avg !== 'number') {
+      return res.status(400).json({
+        error: 'Each entry must be {date: "YYYY-MM-DD", avg: <fraction 0-1>}.',
+      });
+    }
+  }
+  // Load only the most recent MAX_HISTORY_DAYS entries
+  moistureHistoryCache[id].completedDays = completedDays.slice(-MAX_HISTORY_DAYS);
+  moistureHistoryCache[id].currentDay    = getTodayDateStr();
+  moistureHistoryCache[id].dayReadings   = [];
+
+  const ready = moistureHistoryCache[id].completedDays.length >= MAX_HISTORY_DAYS;
+  console.log('DEV: Injected ' + moistureHistoryCache[id].completedDays.length +
+    ' history days for Node ' + id + ' – ML ready: ' + ready);
+
+  res.json({
+    success:       true,
+    nodeId:        id,
+    completedDays: moistureHistoryCache[id].completedDays.length,
+    mlFeaturesReady: ready,
+    features:      ready ? getMLFeatures(id) : null,
+  });
+});
+
+// POST /api/dev/clear-history
+// ─────────────────────────────────────────────────────────────────────────
+// DEVELOPMENT / TESTING ONLY – gated behind MOCK_MODE.
+// Resets the in-memory moisture history cache so all simulated data is
+// removed before live hardware deployment.
+//
+// Body (optional):
+//   {}               – clears ALL nodes
+//   { "nodeId": 1 }  – clears a specific node only
+//
+// Also immediately writes the cleared state back to the JSON snapshot so
+// a server restart after clearing will NOT reload old simulation data.
+//
+// After clearing: ML returns "unavailable" until 7 real days accumulate.
+// ─────────────────────────────────────────────────────────────────────────
+app.post('/api/dev/clear-history', (req, res) => {
+  if (!MOCK_MODE) {
+    return res.status(403).json({
+      error: 'This endpoint is only available in MOCK_MODE. Set MOCK_MODE=true in .env.',
+    });
+  }
+
+  const { nodeId } = req.body || {};
+  const targets = nodeId ? [parseInt(nodeId)] : [1, 2, 3, 4];
+
+  // Validate nodeId if provided
+  if (nodeId && !moistureHistoryCache[targets[0]]) {
+    return res.status(400).json({ error: 'Invalid nodeId: ' + nodeId });
+  }
+
+  // Reset in-memory cache for targeted nodes
+  for (const id of targets) {
+    moistureHistoryCache[id] = { currentDay: null, dayReadings: [], completedDays: [] };
+  }
+
+  console.log('DEV: History cache CLEARED for node(s): ' + targets.join(', '));
+
+  // Immediately persist the cleared state to the snapshot file so a
+  // server restart after clearing does not reload old simulation data.
+  try {
+    if (fs.existsSync(SNAPSHOT_FILE)) {
+      const snap = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+      snap.historyCache = moistureHistoryCache;
+      fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snap, null, 2), 'utf8');
+      console.log('DEV: Snapshot updated with cleared history.');
+    }
+  } catch (snErr) {
+    console.warn('DEV: Could not update snapshot during clear (non-fatal): ' + snErr.message);
+  }
+
+  res.json({
+    success:  true,
+    cleared:  targets,
+    message:  'History cache reset for node(s) [' + targets.join(', ') + ']. '
+            + 'ML is now unavailable until 7 real completed days accumulate.',
+  });
+});
+
 // GET /api/health
 // Quick health check - useful for monitoring and tests
 app.get('/api/health', async (req, res) => {
@@ -726,6 +1135,8 @@ app.get('/api/health', async (req, res) => {
 // ==============================================================
 
 async function start() {
+  loadHistoryFromSnapshot();  // Restore daily moisture history before anything else
+  loadGraphHistory();         // Restore downsampled graph history
   await connectMongoDB();
 
   app.listen(PORT, () => {

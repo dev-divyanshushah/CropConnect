@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-08-15T18:40:53.198Z",
+  "timestamp": "2026-08-16T15:50:31.220Z",
   "dataSource": "MOCK",
   "threshold": 65,
   "weather": {
     "available": true,
     "rainExpected": true,
-    "temperature": 28,
+    "temperature": 27,
     "description": "light rain",
     "city": "Mumbai",
     "maxRainMm": 1
@@ -14,38 +14,91 @@
     "node1": {
       "nodeId": 1,
       "masterId": 1,
-      "moisture": 24,
+      "moisture": 21,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T18:40:53.197Z"
+      "updatedAt": "2026-08-16T15:50:31.215Z"
     },
     "node2": {
       "nodeId": 2,
       "masterId": 1,
-      "moisture": 58,
+      "moisture": 64,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T18:40:53.197Z"
+      "updatedAt": "2026-08-16T15:50:31.215Z"
     },
     "node3": {
       "nodeId": 3,
       "masterId": 2,
-      "moisture": 39,
+      "moisture": 40,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-15T18:40:53.197Z"
+      "updatedAt": "2026-08-16T15:50:31.215Z"
     },
     "node4": {
       "nodeId": 4,
       "masterId": 2,
-      "moisture": 68,
+      "moisture": 76,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-15T18:40:53.197Z"
+      "updatedAt": "2026-08-16T15:50:31.215Z"
+    }
+  },
+  "historyCache": {
+    "1": {
+      "currentDay": "2026-08-16",
+      "dayReadings": [
+        0.5
+      ],
+      "completedDays": [
+        {
+          "date": "2023-01-01",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-02",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-03",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-04",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-05",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-06",
+          "avg": 0.5
+        },
+        {
+          "date": "2023-01-07",
+          "avg": 0.5
+        }
+      ]
+    },
+    "2": {
+      "currentDay": null,
+      "dayReadings": [],
+      "completedDays": []
+    },
+    "3": {
+      "currentDay": null,
+      "dayReadings": [],
+      "completedDays": []
+    },
+    "4": {
+      "currentDay": null,
+      "dayReadings": [],
+      "completedDays": []
     }
   }
 }
