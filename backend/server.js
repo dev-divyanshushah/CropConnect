@@ -700,7 +700,8 @@ async function saveToMongoDB(nodeData, irrigationOn, weather) {
       masterId:     nodeData.master,
       moisture:     nodeData.moisture,
       predictedMoisture: (nodeData.ml && nodeData.ml.available) ? nodeData.ml.predictedMoisturePct : null,
-      status:       nodeData.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK',
+      // B6 fix: guard against null moisture — never compare null as a number
+      status:       nodeData.moisture === null ? 'NO DATA' : (nodeData.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK'),
       irrigationOn,
       override:     nodeData.override || null,
       rainExpected: weather && weather.rainExpected ? true : false,

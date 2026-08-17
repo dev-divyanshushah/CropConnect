@@ -272,23 +272,27 @@ function updateNodeCard(node, weather) {
   else if (status==='OK')  card.classList.add('state-ok');
   else                     card.classList.add('state-nodata');
 
-  // Moisture value
+  // Moisture value — F10: '--' (double dash) when no data
   const moistureEl = card.querySelector('.moisture-value');
   if (moisture !== null) {
     moistureEl.textContent = Math.round(moisture);
     moistureEl.style.color = irrigating ? 'var(--blue)' : (status === 'DRY' ? 'var(--red)' : 'var(--green)');
   } else {
-    moistureEl.textContent = '-';
+    moistureEl.textContent = '--';
     moistureEl.style.color = 'var(--text-muted)';
   }
 
-  // Progress bar
+  // Progress bar — F3: hide (width=0, no fill class) when no data
   const bar = card.querySelector('.moisture-bar-fill');
-  const pct = moisture !== null ? Math.min(100, Math.max(0, moisture)) : 0;
-  bar.style.width = `${pct}%`;
   bar.className = 'moisture-bar-fill';
-  if (irrigating)          bar.classList.add('irrigating');
-  else if (status==='DRY') bar.classList.add('dry');
+  if (moisture !== null) {
+    const pct = Math.min(100, Math.max(0, moisture));
+    bar.style.width = `${pct}%`;
+    if (irrigating)          bar.classList.add('irrigating');
+    else if (status==='DRY') bar.classList.add('dry');
+  } else {
+    bar.style.width = '0%';
+  }
 
   // Status badge
   const badge = card.querySelector('.node-status-badge');
@@ -317,15 +321,50 @@ function updateNodeCard(node, weather) {
     irrValue.className = 'irrigation-value irr-off';
   }
 
-  // Last updated
+  // Last updated + F8: stale sensor detection (5 minute threshold)
+  const STALE_MS = 5 * 60 * 1000; // 5 minutes
   const lastUpdatedEl = card.querySelector('.last-updated');
+  const mlStatusEl    = card.querySelector('.ml-status');
+
+  let isStale = false;
   if (updatedAt) {
-    const d = new Date(updatedAt);
-    lastUpdatedEl.textContent = `Updated: ${d.toLocaleTimeString()}`;
+    const age = Date.now() - new Date(updatedAt).getTime();
+    isStale = age > STALE_MS;
+    if (isStale) {
+      // Keep last moisture value visible as historical info — only change badge/state
+      card.classList.remove('state-ok', 'state-dry', 'state-irrigating', 'state-nodata');
+      card.classList.add('state-stale');
+      badge.textContent = '⚠ Sensor Offline';
+      badge.className = 'node-status-badge badge-stale';
+      const lastSeen = new Date(updatedAt).toLocaleTimeString();
+      lastUpdatedEl.textContent = `⚠ Last seen: ${lastSeen} — Sensor offline`;
+    } else {
+      lastUpdatedEl.textContent = `Updated: ${new Date(updatedAt).toLocaleTimeString()}`;
+    }
   } else {
     lastUpdatedEl.textContent = 'No data received yet';
   }
-}
+
+  // F9: ML status indicator — shown only when we have sensor data and ml object exists
+  if (mlStatusEl) {
+    mlStatusEl.className = 'ml-status';
+    mlStatusEl.textContent = '';
+    if (node.ml) {
+      if (node.ml.available === true) {
+        mlStatusEl.textContent = '🤖 ML Prediction: Active';
+        mlStatusEl.classList.add('ml-active');
+      } else if (node.ml.error && node.ml.error.includes('Insufficient history')) {
+        const count = node.ml.completedDays || 0;
+        mlStatusEl.textContent = `🤖 ML: Warming up (${count}/7 days)`;
+        mlStatusEl.classList.add('ml-warming');
+      } else if (node.ml.available === false) {
+        mlStatusEl.textContent = '⚠ ML: Unavailable — Real sensor data active';
+        mlStatusEl.classList.add('ml-unavail');
+      }
+    }
+  }
+
+}  // end updateNodeCard
 
 // =================================================================
 // Settings Field Updater (called on data refresh)
