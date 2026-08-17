@@ -14,7 +14,7 @@
 // =================================================================
 
 // ── Backend URL ──────────────────────────────────────────────────
-const BACKEND_URL = 'http://localhost:3000';
+const BACKEND_URL = "https://cropconnect-backend-p0bo.onrender.com";
 
 // ── How often to refresh data ────────────────────────────────────
 const REFRESH_INTERVAL_MS = 10000; // 10 seconds
