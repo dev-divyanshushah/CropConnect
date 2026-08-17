@@ -119,7 +119,7 @@ async function connectMongoDB() {
       temperature:  { type: Number, default: null },
       weatherDesc:  { type: String, default: null },
       dataSource:   { type: String, default: 'real' },
-      timestamp:    { type: Date, default: Date.now, index: true },
+      timestamp:    { type: Date, default: Date.now, index: true, expires: '60d' },
     });
     SensorReading = mongoose.model('SensorReading', readingSchema);
 
@@ -723,6 +723,9 @@ async function saveToMongoDB(nodeData, irrigationOn, weather) {
 // SECTION 10 - COMBINED PROCESS + SNAPSHOT HELPER
 // ==============================================================
 
+let lastDbWriteTime = { 1: 0, 2: 0, 3: 0, 4: 0 };
+let lastDbWriteUpdateStr = { 1: null, 2: null, 3: null, 4: null };
+
 async function processAndSnapshot() {
   try {
     const weather        = await fetchWeather();
@@ -730,19 +733,29 @@ async function processAndSnapshot() {
     let graphAppended = false;
     for (const n of processedNodes) {
       if (n.moisture !== null) {
-        await saveToMongoDB(n, n.irrigationOn, weather);
+        
+        // --- MONGODB 5-MINUTE THROTTLE & DUPLICATE PREVENTION ---
+        const nodeState = sensorData[n.node];
+        const nowMs = Date.now();
+        const hasNewData = nodeState && nodeState.updatedAt !== lastDbWriteUpdateStr[n.node];
+        const timeSinceLastWrite = nowMs - lastDbWriteTime[n.node];
+        
+        if (hasNewData && timeSinceLastWrite >= 300000) {
+          await saveToMongoDB(n, n.irrigationOn, weather);
+          lastDbWriteTime[n.node] = nowMs;
+          lastDbWriteUpdateStr[n.node] = nodeState ? nodeState.updatedAt : null;
+        }
         
         // Append to graph cache (downsampled to 1 point every 5 mins)
         const cache = graphHistoryCache[n.node];
-        const now = new Date();
         let shouldAppend = cache.length === 0;
         if (!shouldAppend) {
           const lastPointTime = new Date(cache[cache.length - 1].timestamp);
-          if (now - lastPointTime >= 300000) shouldAppend = true;
+          if (nowMs - lastPointTime >= 300000) shouldAppend = true;
         }
         if (shouldAppend) {
           cache.push({
-            timestamp: now.toISOString(),
+            timestamp: new Date(nowMs).toISOString(),
             masterId: n.master,
             nodeId: n.node,
             moisture: n.moisture,
@@ -890,26 +903,59 @@ app.get('/api/history', async (req, res) => {
 
   try {
     if (dbState.connected && SensorReading) {
-      const docs = await SensorReading.find({
-        nodeId: node,
-        masterId: master,
-        timestamp: { $gte: since }
-      }).sort({ timestamp: 1 }).lean();
-      
-      const results = docs.map(d => ({
-        timestamp: d.timestamp,
-        moisture: d.moisture,
-        predictedMoisture: d.predictedMoisture,
-        irrigationOn: d.irrigationOn
-      }));
-      
-      // Downsample to max ~500 points to prevent frontend lag
-      const downsampled = [];
-      const step = Math.ceil(results.length / 500);
-      for (let i = 0; i < results.length; i += step) {
-        downsampled.push(results[i]);
+      if (range === '24h') {
+        // For 24h, return raw 5-minute throttled data directly
+        const docs = await SensorReading.find({
+          nodeId: node,
+          masterId: master,
+          timestamp: { $gte: since }
+        }).sort({ timestamp: 1 }).lean();
+        
+        const results = docs.map(d => ({
+          timestamp: d.timestamp,
+          moisture: d.moisture,
+          predictedMoisture: d.predictedMoisture,
+          irrigationOn: d.irrigationOn
+        }));
+        return res.json(results);
+      } else {
+        // For 7d and 30d, use MongoDB aggregation to average by hour
+        // This prevents returning too many points and crashing the frontend
+        const agg = await SensorReading.aggregate([
+          { 
+            $match: { 
+              nodeId: node, 
+              masterId: master, 
+              timestamp: { $gte: since } 
+            } 
+          },
+          {
+            $group: {
+              _id: {
+                year: { $year: "$timestamp" },
+                month: { $month: "$timestamp" },
+                day: { $dayOfMonth: "$timestamp" },
+                hour: { $hour: "$timestamp" }
+              },
+              timestamp: { $first: "$timestamp" },
+              moisture: { $avg: "$moisture" },
+              predictedMoisture: { $avg: "$predictedMoisture" },
+              irrigationOn: { $max: { $cond: ["$irrigationOn", 1, 0] } } // If any point in hour was on, it's on
+            }
+          },
+          { $sort: { timestamp: 1 } },
+          {
+            $project: {
+              _id: 0,
+              timestamp: 1,
+              moisture: { $round: ["$moisture", 1] },
+              predictedMoisture: { $round: ["$predictedMoisture", 1] },
+              irrigationOn: { $eq: ["$irrigationOn", 1] }
+            }
+          }
+        ]);
+        return res.json(agg);
       }
-      return res.json(downsampled);
     } else {
       const cache = graphHistoryCache[node] || [];
       const results = cache.filter(p => new Date(p.timestamp) >= since && p.masterId === master);
