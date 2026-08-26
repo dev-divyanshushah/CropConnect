@@ -137,6 +137,10 @@ async function fetchAndUpdate() {
     for (const node of data.nodes) {
       updateNodeCard(node, data.weather);
     }
+    
+    // Update master cards (unified irrigation controls)
+    updateMasterCard(1, data.nodes);
+    updateMasterCard(2, data.nodes);
 
     // Update farm settings fields (only if user is not currently editing)
     if (data.farmSettings) {
@@ -308,18 +312,7 @@ function updateNodeCard(node, weather) {
     badge.classList.add('badge-nodata');
   }
 
-  // Irrigation button
-  const irrRow   = card.querySelector('.irrigation-row');
-  const irrValue = card.querySelector('.irrigation-value');
-  if (irrigating) {
-    irrRow.classList.add('active');
-    irrValue.textContent = 'ON';
-    irrValue.className = 'irrigation-value irr-on';
-  } else {
-    irrRow.classList.remove('active');
-    irrValue.textContent = 'OFF';
-    irrValue.className = 'irrigation-value irr-off';
-  }
+
 
   // Last updated + F8: stale sensor detection (5 minute threshold)
   const STALE_MS = 5 * 60 * 1000; // 5 minutes
@@ -502,6 +495,77 @@ async function setValveAuto(nodeId) {
   } catch (err) {
     console.error('Failed to set valve auto:', err);
     alert('Could not connect to backend to set valve to AUTO.');
+  }
+}
+
+// =================================================================
+// Master Valve Toggle
+// =================================================================
+async function toggleMaster(masterId) {
+  const nodes = masterId === 1 ? [1, 2] : [3, 4];
+  const card = document.getElementById(`master-card-${masterId}`);
+  if (!card) return;
+  const btn = card.querySelector(`#master-valve-btn-${masterId}`);
+  const isCurrentlyOn = btn.textContent.trim() === 'ON';
+  const newState = isCurrentlyOn ? 'OFF' : 'ON';
+
+  try {
+    await Promise.all(nodes.map(nodeId => 
+      fetch(`${BACKEND_URL}/api/toggle-valve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node: nodeId, state: newState }),
+      })
+    ));
+    fetchAndUpdate();
+  } catch (err) {
+    console.error('Failed to toggle master valve:', err);
+    alert('Could not connect to backend to toggle master valve.');
+  }
+}
+
+async function setMasterAuto(masterId) {
+  const nodes = masterId === 1 ? [1, 2] : [3, 4];
+  try {
+    await Promise.all(nodes.map(nodeId => 
+      fetch(`${BACKEND_URL}/api/toggle-valve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ node: nodeId, state: 'AUTO' }),
+      })
+    ));
+    fetchAndUpdate();
+  } catch (err) {
+    console.error('Failed to set master auto:', err);
+    alert('Could not connect to backend to set master valve to AUTO.');
+  }
+}
+
+function updateMasterCard(masterId, nodesData) {
+  const nodeIds = masterId === 1 ? [1, 2] : [3, 4];
+  const masterNodes = nodesData.filter(n => nodeIds.includes(n.node));
+  if (masterNodes.length === 0) return;
+
+  const card = document.getElementById(`master-card-${masterId}`);
+  if (!card) return;
+
+  const irrRow = card.querySelector('.irrigation-row');
+  const irrValue = card.querySelector(`#master-valve-btn-${masterId}`);
+  if (!irrRow || !irrValue) return;
+
+  // If any node in this master is irrigating, show as ON
+  const isIrrigating = masterNodes.some(n => n.irrigationOn);
+
+  if (isIrrigating) {
+    irrRow.classList.add('active');
+    irrValue.textContent = 'ON';
+    irrValue.className = 'irrigation-value irr-on';
+    card.classList.add('state-irrigating');
+  } else {
+    irrRow.classList.remove('active');
+    irrValue.textContent = 'OFF';
+    irrValue.className = 'irrigation-value irr-off';
+    card.classList.remove('state-irrigating');
   }
 }
 

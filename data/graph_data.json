@@ -31,6 +31,14 @@
       "moisture": 21,
       "predictedMoisture": 49.1,
       "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-26T17:27:45.820Z",
+      "masterId": 1,
+      "nodeId": 1,
+      "moisture": 30,
+      "predictedMoisture": null,
+      "irrigationOn": true
     }
   ],
   "2": [
@@ -63,6 +71,14 @@
       "masterId": 1,
       "nodeId": 2,
       "moisture": 60,
+      "predictedMoisture": null,
+      "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-26T17:27:45.820Z",
+      "masterId": 1,
+      "nodeId": 2,
+      "moisture": 61,
       "predictedMoisture": null,
       "irrigationOn": true
     }
@@ -99,6 +115,14 @@
       "moisture": 35,
       "predictedMoisture": null,
       "irrigationOn": true
+    },
+    {
+      "timestamp": "2026-08-26T17:27:45.820Z",
+      "masterId": 2,
+      "nodeId": 3,
+      "moisture": 36,
+      "predictedMoisture": null,
+      "irrigationOn": true
     }
   ],
   "4": [
@@ -131,6 +155,14 @@
       "masterId": 2,
       "nodeId": 4,
       "moisture": 67,
+      "predictedMoisture": null,
+      "irrigationOn": false
+    },
+    {
+      "timestamp": "2026-08-26T17:27:45.820Z",
+      "masterId": 2,
+      "nodeId": 4,
+      "moisture": 72,
       "predictedMoisture": null,
       "irrigationOn": false
     }

@@ -108,164 +108,148 @@
 
     <div class="nodes-grid">
 
-      <!-- Node 1 -->
-      <div id="node-card-1" class="node-card state-nodata">
-        <div class="node-header">
-          <div>
-            <div class="node-name">🌱 Sector 1 (Node 1)</div>
-            <div class="node-master">Master 1 · ESP8266</div>
-          </div>
-          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+      <!-- MASTER 1 -->
+      <div id="master-card-1" class="master-card">
+        <div class="master-header">
+          <div class="master-title">📡 Master 1 <span>(Nodes 1 & 2)</span></div>
         </div>
-
-        <div class="moisture-section">
-          <div class="moisture-row">
-            <div>
-              <div class="moisture-label">Soil Moisture</div>
+        <div class="master-nodes">
+          <!-- Node 1 -->
+          <div id="node-card-1" class="node-card state-nodata">
+            <div class="node-header">
               <div>
-                <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                <span class="moisture-unit"> %</span>
+                <div class="node-name">🌱 Sector 1</div>
+                <div class="node-master">Node 1</div>
+              </div>
+              <div class="node-status-badge badge-nodata">⬜ No Data</div>
+            </div>
+            <div class="moisture-section">
+              <div class="moisture-row">
+                <div>
+                  <div class="moisture-label">Soil Moisture</div>
+                  <div>
+                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                    <span class="moisture-unit"> %</span>
+                  </div>
+                </div>
+              </div>
+              <div class="moisture-bar-track">
+                <div class="moisture-bar-fill" style="width:0%"></div>
               </div>
             </div>
+            <div class="ml-status"></div>
+            <div class="last-updated">No data received yet</div>
           </div>
-          <div class="moisture-bar-track">
-            <div class="moisture-bar-fill" style="width:0%"></div>
+
+          <!-- Node 2 -->
+          <div id="node-card-2" class="node-card state-nodata">
+            <div class="node-header">
+              <div>
+                <div class="node-name">🌱 Sector 2</div>
+                <div class="node-master">Node 2</div>
+              </div>
+              <div class="node-status-badge badge-nodata">⬜ No Data</div>
+            </div>
+            <div class="moisture-section">
+              <div class="moisture-row">
+                <div>
+                  <div class="moisture-label">Soil Moisture</div>
+                  <div>
+                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                    <span class="moisture-unit"> %</span>
+                  </div>
+                </div>
+              </div>
+              <div class="moisture-bar-track">
+                <div class="moisture-bar-fill" style="width:0%"></div>
+              </div>
+            </div>
+            <div class="ml-status"></div>
+            <div class="last-updated">No data received yet</div>
           </div>
         </div>
-
-        <div class="irrigation-row">
+        <div class="irrigation-row master-irrigation" id="master-irr-row-1">
           <div class="irrigation-label">
             <span class="irrigation-icon">💧</span>
-            Irrigation valve
+            Master 1 Valves
           </div>
           <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(1)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="valve-btn-1" onclick="toggleValve(1)">OFF</button>
+            <button class="irrigation-value irr-auto-btn" onclick="setMasterAuto(1)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="master-valve-btn-1" onclick="toggleMaster(1)">OFF</button>
           </div>
         </div>
-
-        <div class="ml-status"></div>
-        <div class="last-updated">No data received yet</div>
       </div>
 
-      <!-- Node 2 -->
-      <div id="node-card-2" class="node-card state-nodata">
-        <div class="node-header">
-          <div>
-            <div class="node-name">🌱 Sector 2 (Node 2)</div>
-            <div class="node-master">Master 1 · ESP8266</div>
-          </div>
-          <div class="node-status-badge badge-nodata">⬜ No Data</div>
+      <!-- MASTER 2 -->
+      <div id="master-card-2" class="master-card">
+        <div class="master-header">
+          <div class="master-title">📡 Master 2 <span>(Nodes 3 & 4)</span></div>
         </div>
-
-        <div class="moisture-section">
-          <div class="moisture-row">
-            <div>
-              <div class="moisture-label">Soil Moisture</div>
+        <div class="master-nodes">
+          <!-- Node 3 -->
+          <div id="node-card-3" class="node-card state-nodata">
+            <div class="node-header">
               <div>
-                <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                <span class="moisture-unit"> %</span>
+                <div class="node-name">🌱 Sector 3</div>
+                <div class="node-master">Node 3</div>
+              </div>
+              <div class="node-status-badge badge-nodata">⬜ No Data</div>
+            </div>
+            <div class="moisture-section">
+              <div class="moisture-row">
+                <div>
+                  <div class="moisture-label">Soil Moisture</div>
+                  <div>
+                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                    <span class="moisture-unit"> %</span>
+                  </div>
+                </div>
+              </div>
+              <div class="moisture-bar-track">
+                <div class="moisture-bar-fill" style="width:0%"></div>
               </div>
             </div>
+            <div class="ml-status"></div>
+            <div class="last-updated">No data received yet</div>
           </div>
-          <div class="moisture-bar-track">
-            <div class="moisture-bar-fill" style="width:0%"></div>
-          </div>
-        </div>
 
-        <div class="irrigation-row">
-          <div class="irrigation-label">
-            <span class="irrigation-icon">💧</span>
-            Irrigation valve
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(2)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="valve-btn-2" onclick="toggleValve(2)">OFF</button>
-          </div>
-        </div>
-
-        <div class="ml-status"></div>
-        <div class="last-updated">No data received yet</div>
-      </div>
-
-      <!-- Node 3 -->
-      <div id="node-card-3" class="node-card state-nodata">
-        <div class="node-header">
-          <div>
-            <div class="node-name">🌱 Sector 3 (Node 3)</div>
-            <div class="node-master">Master 2 · ESP8266</div>
-          </div>
-          <div class="node-status-badge badge-nodata">⬜ No Data</div>
-        </div>
-
-        <div class="moisture-section">
-          <div class="moisture-row">
-            <div>
-              <div class="moisture-label">Soil Moisture</div>
+          <!-- Node 4 -->
+          <div id="node-card-4" class="node-card state-nodata">
+            <div class="node-header">
               <div>
-                <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                <span class="moisture-unit"> %</span>
+                <div class="node-name">🌱 Sector 4</div>
+                <div class="node-master">Node 4</div>
+              </div>
+              <div class="node-status-badge badge-nodata">⬜ No Data</div>
+            </div>
+            <div class="moisture-section">
+              <div class="moisture-row">
+                <div>
+                  <div class="moisture-label">Soil Moisture</div>
+                  <div>
+                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
+                    <span class="moisture-unit"> %</span>
+                  </div>
+                </div>
+              </div>
+              <div class="moisture-bar-track">
+                <div class="moisture-bar-fill" style="width:0%"></div>
               </div>
             </div>
-          </div>
-          <div class="moisture-bar-track">
-            <div class="moisture-bar-fill" style="width:0%"></div>
+            <div class="ml-status"></div>
+            <div class="last-updated">No data received yet</div>
           </div>
         </div>
-
-        <div class="irrigation-row">
+        <div class="irrigation-row master-irrigation" id="master-irr-row-2">
           <div class="irrigation-label">
             <span class="irrigation-icon">💧</span>
-            Irrigation valve
+            Master 2 Valves
           </div>
           <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(3)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="valve-btn-3" onclick="toggleValve(3)">OFF</button>
+            <button class="irrigation-value irr-auto-btn" onclick="setMasterAuto(2)" title="Return to automatic mode">AUTO</button>
+            <button class="irrigation-value irr-off" id="master-valve-btn-2" onclick="toggleMaster(2)">OFF</button>
           </div>
         </div>
-
-        <div class="ml-status"></div>
-        <div class="last-updated">No data received yet</div>
-      </div>
-
-      <!-- Node 4 -->
-      <div id="node-card-4" class="node-card state-nodata">
-        <div class="node-header">
-          <div>
-            <div class="node-name">🌱 Sector 4 (Node 4)</div>
-            <div class="node-master">Master 2 · ESP8266</div>
-          </div>
-          <div class="node-status-badge badge-nodata">⬜ No Data</div>
-        </div>
-
-        <div class="moisture-section">
-          <div class="moisture-row">
-            <div>
-              <div class="moisture-label">Soil Moisture</div>
-              <div>
-                <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                <span class="moisture-unit"> %</span>
-              </div>
-            </div>
-          </div>
-          <div class="moisture-bar-track">
-            <div class="moisture-bar-fill" style="width:0%"></div>
-          </div>
-        </div>
-
-        <div class="irrigation-row">
-          <div class="irrigation-label">
-            <span class="irrigation-icon">💧</span>
-            Irrigation valve
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setValveAuto(4)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="valve-btn-4" onclick="toggleValve(4)">OFF</button>
-          </div>
-        </div>
-
-        <div class="ml-status"></div>
-        <div class="last-updated">No data received yet</div>
       </div>
 
     </div><!-- /nodes-grid -->
