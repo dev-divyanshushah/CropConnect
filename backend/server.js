@@ -487,6 +487,94 @@ function startSimInterval() {
   console.log('[SIM] Simulation tick interval started – every ' + (intervalMs / 1000).toFixed(1) + 's (TIME_SCALE=' + SimConfig.TIME_SCALE + ')');
 }
 
+/**
+ * Backfill graph history with realistic simulated data going back 24 hours.
+ * Called on fresh startup so the Sensor Analytics chart has data to display
+ * immediately without waiting for 24 hours of real ticks to accumulate.
+ *
+ * Only runs when a node has NO existing graph history (cache is empty).
+ * Uses the same evaporation physics as simTick() but applied retroactively.
+ */
+function backfillGraphHistory() {
+  const TICK_INTERVAL_MS = SimConfig.SIMULATION_INTERVAL_MS; // always 5 real minutes for backfill
+  const HOURS_BACK       = 24;
+  const totalTicks       = Math.floor((HOURS_BACK * 60 * 60 * 1000) / TICK_INTERVAL_MS); // 288 for 24h
+  const now              = Date.now();
+
+  const farmSoil = farmSettings.soilType || 'Loamy';
+  const farmCrop = farmSettings.cropType || 'Wheat';
+  const soilFactor = SimConfig.SOIL_FACTORS[farmSoil] || 1.0;
+  const cropFactor = SimConfig.CROP_FACTORS[farmCrop] || 1.0;
+
+  // Starting moisture per node: slightly higher than current so it declines naturally
+  const startMoisture = {
+    1: Math.min(95, simState.nodes[1].moisture + 25),
+    2: Math.min(95, simState.nodes[2].moisture + 15),
+    3: Math.min(95, simState.nodes[3].moisture + 20),
+    4: Math.min(95, simState.nodes[4].moisture + 10),
+  };
+
+  for (const nodeId of [1, 2, 3, 4]) {
+    const cache  = graphHistoryCache[nodeId];
+    const master = nodeId <= 2 ? 1 : 2;
+
+    // Only backfill if there's no existing data for this node
+    if (cache && cache.length > 0) {
+      console.log('[SIM] Node ' + nodeId + ': Graph history exists (' + cache.length + ' pts), skipping backfill');
+      continue;
+    }
+
+    console.log('[SIM] Node ' + nodeId + ': Backfilling ' + totalTicks + ' graph points (24h)');
+
+    let moisture   = startMoisture[nodeId];
+    let irrCooldown = 0; // ticks to wait after irrigation before next decision
+
+    const points = [];
+    for (let i = totalTicks; i >= 0; i--) {
+      const tickTime = now - i * TICK_INTERVAL_MS;
+
+      // Simple sinusoidal temperature model: hotter midday, cooler at night
+      const hourOfDay  = new Date(tickTime).getHours() + new Date(tickTime).getMinutes() / 60;
+      const tempApprox = 22 + 10 * Math.sin(Math.PI * (hourOfDay - 6) / 12); // 22–32°C range
+      const humidity   = 55 + 15 * Math.cos(Math.PI * hourOfDay / 12);        // 40–70% range
+
+      // Evaporation
+      const tempFactor  = 1 + SimConfig.TEMP_COEFF * Math.max(0, tempApprox - SimConfig.TEMP_REF);
+      const humidFactor = Math.max(0.1, 1 - SimConfig.HUMIDITY_COEFF * Math.max(0, humidity - 50));
+      const evap        = SimConfig.BASE_EVAP_RATE * tempFactor * soilFactor * cropFactor * humidFactor;
+
+      moisture -= evap;
+      moisture  = Math.max(5, moisture); // never go below 5%
+
+      // Irrigation when below threshold and cooldown expired
+      let irrigated = false;
+      if (moisture < MOISTURE_THRESHOLD && irrCooldown <= 0) {
+        moisture    += SimConfig.IRR_RATE_PER_MIN * SimConfig.IRR_DURATION_MIN;
+        moisture     = Math.min(100, moisture);
+        irrigated    = true;
+        irrCooldown  = Math.ceil((SimConfig.POST_IRR_HOLD_MIN * 60 * 1000) / TICK_INTERVAL_MS); // ~4 ticks
+      } else {
+        irrCooldown--;
+      }
+
+      points.push({
+        timestamp:         new Date(tickTime).toISOString(),
+        masterId:          master,
+        nodeId,
+        moisture:          parseFloat(moisture.toFixed(1)),
+        predictedMoisture: null,
+        irrigationOn:      irrigated,
+      });
+    }
+
+    // Merge into cache (backfill comes first, then any live points that may already be there)
+    graphHistoryCache[nodeId] = points;
+  }
+
+  saveGraphHistory();
+  console.log('[SIM] Graph history backfill complete — 24h of data ready for all nodes');
+}
+
 // Last VALID checkpoint - deep copy, updated only when data is clean
 // Used as fallback if processing fails or MongoDB is unavailable
 let lastValidCheckpoint = null;
@@ -910,6 +998,15 @@ async function buildProcessedNodes(weather) {
     const connectionState = getNodeConnectionState(nodeId);
     const dataSource = (d && d._simulated) ? 'simulated' : 'real';
 
+    // For simulated nodes: always report updatedAt as now so the frontend
+    // never marks them as stale/offline. The moisture value only changes
+    // every 5 minutes per the physics model, but the connection heartbeat
+    // should appear continuous. This is intentional — the normal user
+    // should not see "Sensor Offline" for a simulated node.
+    const reportedUpdatedAt = (d._simulated && simState.enabled)
+      ? new Date().toISOString()
+      : d.updatedAt;
+
     nodes.push({
       node:            nodeId,
       master:          d.master,
@@ -917,7 +1014,7 @@ async function buildProcessedNodes(weather) {
       status:          d.moisture === null ? 'NO DATA' : (d.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK'),
       irrigationOn,
       override:        d.override || null,
-      updatedAt:       d.updatedAt,
+      updatedAt:       reportedUpdatedAt,
       ml:              mlData,
       // Internal fields for developer panel — not displayed in normal UI
       connectionState,
@@ -1677,6 +1774,7 @@ async function start() {
   // If simulation was enabled before restart, resume it
   if (simState.enabled) {
     console.log('[SIM] Resuming simulation engine (was enabled before restart)');
+    backfillGraphHistory(); // fill any missing graph history on restart
     startSimInterval();
     // Give weather cache a moment to load before first tick
     setTimeout(() => {
@@ -1690,6 +1788,7 @@ async function start() {
     for (const nodeId of [1, 2, 3, 4]) {
       simState.nodes[nodeId].lastTickAt = Date.now();
     }
+    backfillGraphHistory(); // generate 24h of history so chart has data immediately
     startSimInterval();
     setTimeout(() => {
       runSimCycle().catch(err => console.error('[SIM] Auto-start cycle error: ' + err.message));
