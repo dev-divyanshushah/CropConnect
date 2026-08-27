@@ -1549,6 +1549,16 @@ app.post('/api/dev/sim-toggle', (req, res) => {
       simTickInterval = null;
       console.log('[SIM] Tick interval stopped');
     }
+    // Clear out any simulated data so the dashboard returns to a blank slate
+    // (No Data) unless there's real hardware connected.
+    for (const nodeId of [1, 2, 3, 4]) {
+      if (sensorData[nodeId] && sensorData[nodeId]._simulated) {
+        sensorData[nodeId].moisture = null;
+        sensorData[nodeId].updatedAt = null;
+        sensorData[nodeId]._simulated = false;
+      }
+    }
+  }
   }
 
   saveSimState();

@@ -841,15 +841,16 @@ function updateChartsLive(nodesData) {
   let devRefreshTimer = null;
 
   // ── Restore simulation state from localStorage on page load ───
-  // This ensures the simulation stays ON after a page refresh.
+  // This ensures the simulation stays ON (or explicitly turns OFF) after a page refresh.
   (function restoreSimState() {
-    const wasEnabled = localStorage.getItem(LS_SIM_ENABLED) === 'true';
-    if (!wasEnabled) return;
+    const lsVal = localStorage.getItem(LS_SIM_ENABLED);
+    if (lsVal === null) return; // No preference saved yet
+    const wasEnabled = lsVal === 'true';
     const savedScale = parseInt(localStorage.getItem(LS_SIM_TIMESCALE)) || 1;
     fetch(`${BACKEND_URL}/api/dev/sim-toggle`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: true, timeScale: savedScale }),
+      body: JSON.stringify({ enabled: wasEnabled, timeScale: savedScale }),
     }).catch(() => {}); // silent — backend may not be ready yet
   })();
 
