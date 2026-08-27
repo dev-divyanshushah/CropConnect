@@ -1559,7 +1559,6 @@ app.post('/api/dev/sim-toggle', (req, res) => {
       }
     }
   }
-  }
 
   saveSimState();
 
