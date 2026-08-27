@@ -1,51 +1,44 @@
 {
-  "timestamp": "2026-08-26T17:30:14.736Z",
+  "timestamp": "2026-08-27T06:33:30.100Z",
   "dataSource": "MOCK",
   "threshold": 65,
-  "weather": {
-    "available": true,
-    "rainExpected": false,
-    "temperature": 30,
-    "description": "broken clouds",
-    "city": "Delhi",
-    "maxRainMm": 0
-  },
+  "weather": null,
   "nodes": {
     "node1": {
       "nodeId": 1,
       "masterId": 1,
-      "moisture": 27,
-      "status": "DRY",
-      "irrigation": "ON",
+      "moisture": 70.6,
+      "status": "OK",
+      "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-27T06:33:30.029Z"
     },
     "node2": {
       "nodeId": 2,
       "masterId": 1,
-      "moisture": 66,
+      "moisture": 69.4,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-27T06:33:30.057Z"
     },
     "node3": {
       "nodeId": 3,
       "masterId": 2,
-      "moisture": 43,
-      "status": "DRY",
-      "irrigation": "ON",
+      "moisture": 68.6,
+      "status": "OK",
+      "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-27T06:33:30.074Z"
     },
     "node4": {
       "nodeId": 4,
       "masterId": 2,
-      "moisture": 72,
+      "moisture": 65.6,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-27T06:33:30.077Z"
     }
   },
   "historyCache": {
