@@ -821,3 +821,264 @@ function updateChartsLive(nodesData) {
   addData(charts.ml, [liveNode.moisture, predicted]);
   addData(charts.irrigation, [liveNode.irrigationOn ? 1 : 0]);
 }
+
+// =================================================================
+// HIDDEN DEVELOPER PANEL
+// =================================================================
+// Secret keyboard shortcut: Ctrl + Shift + D
+// Opens a terminal-style floating panel for controlling the
+// hidden simulation engine. Not visible or accessible to users.
+// No indication of this panel exists anywhere in the normal UI.
+// =================================================================
+
+(function () {
+  'use strict';
+
+  // ── State ─────────────────────────────────────────────────────
+  const LS_SIM_ENABLED   = 'cc_sim_enabled';
+  const LS_SIM_TIMESCALE = 'cc_sim_timescale';
+  let devPanelOpen   = false;
+  let devRefreshTimer = null;
+
+  // ── Restore simulation state from localStorage on page load ───
+  // This ensures the simulation stays ON after a page refresh.
+  (function restoreSimState() {
+    const wasEnabled = localStorage.getItem(LS_SIM_ENABLED) === 'true';
+    if (!wasEnabled) return;
+    const savedScale = parseInt(localStorage.getItem(LS_SIM_TIMESCALE)) || 1;
+    fetch(`${BACKEND_URL}/api/dev/sim-toggle`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true, timeScale: savedScale }),
+    }).catch(() => {}); // silent — backend may not be ready yet
+  })();
+
+  // ── Keyboard shortcut ─────────────────────────────────────────
+  document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+      e.preventDefault();
+      toggleDevPanel();
+    }
+  });
+
+  // ── Panel toggle ─────────────────────────────────────────────
+  function toggleDevPanel() {
+    const existing = document.getElementById('cc-dev-panel');
+    if (existing) {
+      existing.remove();
+      devPanelOpen = false;
+      if (devRefreshTimer) { clearInterval(devRefreshTimer); devRefreshTimer = null; }
+    } else {
+      devPanelOpen = true;
+      openDevPanel();
+    }
+  }
+
+  // ── Build and open the panel ─────────────────────────────────
+  async function openDevPanel() {
+    const panel = document.createElement('div');
+    panel.id = 'cc-dev-panel';
+    panel.innerHTML = `
+      <h2>
+        ⚙ DEV / SIM ENGINE
+        <button class="dev-close-btn" id="dev-close-x" title="Close (Ctrl+Shift+D)">✕</button>
+      </h2>
+      <div id="dev-panel-body">Loading…</div>
+    `;
+    document.body.appendChild(panel);
+
+    panel.querySelector('#dev-close-x').addEventListener('click', toggleDevPanel);
+
+    await refreshDevPanel();
+
+    // Auto-refresh dev panel every 5 seconds
+    devRefreshTimer = setInterval(refreshDevPanel, 5000);
+  }
+
+  // ── Fetch sim state and re-render panel body ─────────────────
+  async function refreshDevPanel() {
+    const panel = document.getElementById('cc-dev-panel');
+    if (!panel) return;
+
+    let state;
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/dev/sim-state`);
+      state = await res.json();
+    } catch (err) {
+      panel.querySelector('#dev-panel-body').innerHTML =
+        `<div style="color:#ef4444">Backend unreachable: ${err.message}</div>`;
+      return;
+    }
+
+    const simOn        = state.enabled;
+    const timeScale    = state.timeScale || 1;
+    const intervalSec  = state.intervalSec || '300.0';
+    const farmInfo     = state.farmSettings || {};
+    const nodes        = state.nodes || {};
+
+    // ── Render body ────────────────────────────────────────────
+    let html = '';
+
+    // ── Control: Sim on/off ────────────────────────────────────
+    html += `
+      <div class="dev-section">
+        <div class="dev-label">Simulation Engine</div>
+        <div class="dev-row">
+          <span class="dev-key">Status</span>
+          <span class="dev-val ${simOn ? 'live' : 'off'}">${simOn ? '● ACTIVE' : '○ INACTIVE'}</span>
+        </div>
+        <div class="dev-btn-group">
+          <button id="dev-sim-on"  ${simOn ? 'class="active"' : ''}>Enable</button>
+          <button id="dev-sim-off" ${!simOn ? 'class="active"' : ''}>Disable</button>
+        </div>
+      </div>
+    `;
+
+    // ── Control: Time scale ────────────────────────────────────
+    html += `
+      <div class="dev-section">
+        <div class="dev-label">Tick Interval</div>
+        <div class="dev-row">
+          <span class="dev-key">Time Scale</span>
+          <span class="dev-val">${timeScale}× (every ${intervalSec}s)</span>
+        </div>
+        <div class="dev-btn-group">
+          <button id="dev-ts-1"   ${timeScale===1   ? 'class="active"' : ''}>1× real</button>
+          <button id="dev-ts-10"  ${timeScale===10  ? 'class="active"' : ''}>10× fast</button>
+          <button id="dev-ts-60"  ${timeScale===60  ? 'class="active"' : ''}>60× demo</button>
+          <button id="dev-ts-300" ${timeScale===300 ? 'class="active"' : ''}>300× ultra</button>
+        </div>
+      </div>
+    `;
+
+    // ── Farm context ───────────────────────────────────────────
+    html += `
+      <div class="dev-section">
+        <div class="dev-label">Farm Context</div>
+        <div class="dev-row"><span class="dev-key">Crop</span><span class="dev-val">${farmInfo.cropType||'—'}</span></div>
+        <div class="dev-row"><span class="dev-key">Soil</span><span class="dev-val">${farmInfo.soilType||'—'}</span></div>
+        <div class="dev-row"><span class="dev-key">Location</span><span class="dev-val">${farmInfo.city||'—'}</span></div>
+      </div>
+    `;
+
+    // ── Per-node status ────────────────────────────────────────
+    html += `<div class="dev-section"><div class="dev-label">Node Status</div><div class="dev-node-grid">`;
+    for (const id of [1, 2, 3, 4]) {
+      const n = nodes[id] || {};
+      const isLive = n.isLive;
+      const phase  = n.phase || 'NORMAL';
+      const phaseClass = phase === 'SATURATED' ? 'sat' : (phase === 'DRAINING' ? 'drain' : '');
+      const dotClass = isLive ? 'live-dot' : 'sim-dot';
+      const label    = isLive ? 'LIVE' : (simOn ? 'SIM' : 'STALE');
+      const irrMini  = n.lastIrrAt
+        ? `Irr: ${new Date(n.lastIrrAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`
+        : 'No irr yet';
+      html += `
+        <div class="dev-node-box">
+          <div class="node-id">
+            <span class="dev-status-dot ${dotClass}"></span>Node ${id}
+          </div>
+          <div><span class="dev-val ${isLive ? 'live' : 'sim'}">${label}</span>
+            <span class="dev-val"> ${n.moisture !== undefined ? n.moisture.toFixed(1) : '—'}%</span>
+          </div>
+          <div class="dev-val ${phaseClass}" style="font-size:9px">${phase}</div>
+          <div class="dev-irr-mini">${irrMini}</div>
+        </div>
+      `;
+    }
+    html += `</div></div>`;
+
+    // ── Recent irrigation events ───────────────────────────────
+    let irrEvents = [];
+    for (const id of [1, 2, 3, 4]) {
+      if (nodes[id] && nodes[id].recentIrrigation) {
+        nodes[id].recentIrrigation.slice(0, 2).forEach(ev => {
+          irrEvents.push({ ...ev, _nodeId: id });
+        });
+      }
+    }
+    irrEvents.sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt));
+    irrEvents = irrEvents.slice(0, 5);
+
+    if (irrEvents.length > 0) {
+      html += `<div class="dev-section"><div class="dev-label">Recent Irrigation</div>`;
+      for (const ev of irrEvents) {
+        const t = new Date(ev.startedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+        html += `
+          <div class="dev-irr-event">
+            <strong>Node ${ev._nodeId || ev.node}</strong> @ ${t}
+            — ${ev.moistureBefore}% → ${ev.moistureAfter}% (${ev.durationMin}min)<br>
+            <span style="color:#475569">${ev.reason || '—'}</span>
+          </div>
+        `;
+      }
+      html += `</div>`;
+    }
+
+    // ── Reset button ───────────────────────────────────────────
+    html += `
+      <div class="dev-section">
+        <div class="dev-label">Reset</div>
+        <div class="dev-btn-group">
+          <button id="dev-reset-all" class="danger">Reset All Nodes</button>
+        </div>
+      </div>
+    `;
+
+    // ── Server time ────────────────────────────────────────────
+    html += `
+      <div style="color:#1e3a5f;font-size:9px;margin-top:8px;text-align:right">
+        ${state.serverTime ? new Date(state.serverTime).toLocaleTimeString() : '—'}
+        &nbsp;·&nbsp; Ctrl+Shift+D to close
+      </div>
+    `;
+
+    panel.querySelector('#dev-panel-body').innerHTML = html;
+
+    // ── Wire buttons ───────────────────────────────────────────
+    const bind = (id, fn) => { const el = panel.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
+
+    bind('dev-sim-on',  () => setSimEnabled(true,  timeScale));
+    bind('dev-sim-off', () => setSimEnabled(false, timeScale));
+    bind('dev-ts-1',    () => setSimEnabled(simOn, 1));
+    bind('dev-ts-10',   () => setSimEnabled(simOn, 10));
+    bind('dev-ts-60',   () => setSimEnabled(simOn, 60));
+    bind('dev-ts-300',  () => setSimEnabled(simOn, 300));
+    bind('dev-reset-all', resetAllNodes);
+  }
+
+  // ── API helpers ───────────────────────────────────────────────
+  async function setSimEnabled(enabled, timeScale) {
+    try {
+      await fetch(`${BACKEND_URL}/api/dev/sim-toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled, timeScale }),
+      });
+      // Persist in localStorage so page refresh preserves state
+      localStorage.setItem(LS_SIM_ENABLED,   String(enabled));
+      localStorage.setItem(LS_SIM_TIMESCALE, String(timeScale));
+      await refreshDevPanel();
+      // Trigger a normal dashboard refresh to pick up new moisture values
+      fetchAndUpdate();
+    } catch (err) {
+      alert('Dev toggle failed: ' + err.message);
+    }
+  }
+
+  async function resetAllNodes() {
+    if (!confirm('Reset all simulation nodes to default moisture values?')) return;
+    try {
+      await fetch(`${BACKEND_URL}/api/dev/sim-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      await refreshDevPanel();
+      fetchAndUpdate();
+    } catch (err) {
+      alert('Reset failed: ' + err.message);
+    }
+  }
+
+})(); // end hidden developer panel IIFE

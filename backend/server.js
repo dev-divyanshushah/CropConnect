@@ -58,6 +58,32 @@ const JSON_SNAPSHOT_PATH    = process.env.JSON_SNAPSHOT_PATH || '../data/irrigat
 const GRAPH_DATA_PATH       = process.env.GRAPH_DATA_PATH || '../data/graph_data.json';
 const ML_API_URL            = process.env.ML_API_URL || 'http://localhost:8000';
 
+// ==============================================================
+// SIMULATION ENGINE CONFIGURATION
+// ==============================================================
+// All parameters are configurable here. TIME_SCALE can be changed
+// at runtime via POST /api/dev/sim-toggle (developer only).
+// ==============================================================
+const SimConfig = {
+  DATA_TIMEOUT_MS:        2 * 60 * 1000,  // 2 min: node goes sim after this
+  SIMULATION_INTERVAL_MS: 5 * 60 * 1000,  // base tick = 5 real minutes
+  TIME_SCALE:             1,              // 1=real-time, 60=1min/sec (mutable)
+  BASE_EVAP_RATE:         0.8,            // % moisture lost per 5-min tick at 25°C
+  TEMP_COEFF:             0.04,           // extra % loss per °C above reference
+  TEMP_REF:               25,             // reference temperature in °C
+  POST_IRR_HOLD_MIN:      20,             // minutes moisture stays elevated after irrigation
+  IRR_RATE_PER_MIN:       2.5,            // % moisture gain per minute of irrigation
+  IRR_DURATION_MIN:       4,              // default irrigation duration in minutes
+  RAIN_EFFICIENCY:        0.7,            // fraction of rain (mm) that becomes moisture %
+  HUMIDITY_COEFF:         0.008,          // % reduction per 1% humidity above 50%
+  MAX_IRR_HISTORY:        50,             // max irrigation events stored per node
+  // Soil retention factor: higher = slower moisture loss
+  SOIL_FACTORS: { Loamy: 1.0, Sandy: 1.4, Clay: 0.7, Silty: 0.9, Peaty: 0.6, Chalky: 1.2 },
+  // Crop water demand factor: higher = more water needed (faster loss)
+  CROP_FACTORS: { Wheat: 1.0, Rice: 0.6, Maize: 1.1, Sugarcane: 0.8, Cotton: 1.2,
+                  Soybean: 1.0, Potato: 1.1, Tomato: 1.0, Onion: 1.0, Other: 1.0 },
+};
+
 // Resolve paths relative to this file's directory
 const SNAPSHOT_FILE = path.resolve(__dirname, JSON_SNAPSHOT_PATH);
 const GRAPH_FILE    = path.resolve(__dirname, GRAPH_DATA_PATH);
@@ -151,6 +177,315 @@ let sensorData = {
   3: { node: 3, master: 2, moisture: null, updatedAt: null, override: null },
   4: { node: 4, master: 2, moisture: null, updatedAt: null, override: null },
 };
+
+// ==============================================================
+// SECTION 2.1 – REAL SENSOR TRACKING
+// ==============================================================
+// Timestamp of last VALID real sensor packet per node.
+// Used to decide whether to use real data or simulation.
+let sensorLastRealAt = { 1: null, 2: null, 3: null, 4: null };
+
+/**
+ * Returns true if a valid real sensor reading was received
+ * within DATA_TIMEOUT_MS. Used to suppress simulation.
+ */
+function isNodeLive(nodeId) {
+  const lastAt = sensorLastRealAt[nodeId];
+  if (!lastAt) return false;
+  return (Date.now() - lastAt) < SimConfig.DATA_TIMEOUT_MS;
+}
+
+/**
+ * Returns 'live' if real data is fresh, 'offline' otherwise.
+ * Internal use only — not exposed to normal users.
+ */
+function getNodeConnectionState(nodeId) {
+  return isNodeLive(nodeId) ? 'live' : 'offline';
+}
+
+// ==============================================================
+// SECTION 2.2 – SIMULATION STATE
+// ==============================================================
+// Physics-based simulation engine state per node.
+// Persisted in the JSON snapshot so server restarts preserve
+// accumulated moisture and irrigation history.
+//
+// This entire system is hidden from normal users.
+// Accessible only via the secret developer API endpoints.
+// ==============================================================
+let simState = {
+  enabled:   false,
+  timeScale: 1,
+  nodes: {
+    1: { moisture: 28, lastTickAt: null, lastIrrAt: null, irrDurationMin: 0, moistureBeforeIrr: null, phase: 'NORMAL' },
+    2: { moisture: 62, lastTickAt: null, lastIrrAt: null, irrDurationMin: 0, moistureBeforeIrr: null, phase: 'NORMAL' },
+    3: { moisture: 38, lastTickAt: null, lastIrrAt: null, irrDurationMin: 0, moistureBeforeIrr: null, phase: 'NORMAL' },
+    4: { moisture: 71, lastTickAt: null, lastIrrAt: null, irrDurationMin: 0, moistureBeforeIrr: null, phase: 'NORMAL' },
+  },
+  irrigationHistory: { 1: [], 2: [], 3: [], 4: [] },
+};
+
+// Running interval handle for simulation ticks
+let simTickInterval = null;
+
+/**
+ * Persist simState into the JSON snapshot alongside existing data.
+ * Called after every sim tick so restarts preserve state.
+ */
+function saveSimState() {
+  try {
+    if (!fs.existsSync(SNAPSHOT_FILE)) return;
+    const snap = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+    snap._simState = {
+      enabled:   simState.enabled,
+      timeScale: simState.timeScale,
+      nodes:     JSON.parse(JSON.stringify(simState.nodes)),
+      irrigationHistory: JSON.parse(JSON.stringify(simState.irrigationHistory)),
+    };
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snap, null, 2), 'utf8');
+  } catch (err) {
+    console.warn('[SIM] Could not persist sim state: ' + err.message);
+  }
+}
+
+/**
+ * Load simState from snapshot on startup.
+ */
+function loadSimState() {
+  try {
+    if (!fs.existsSync(SNAPSHOT_FILE)) return;
+    const snap = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, 'utf8'));
+    if (!snap._simState) return;
+    const s = snap._simState;
+    simState.enabled   = s.enabled   || false;
+    simState.timeScale = s.timeScale || 1;
+    SimConfig.TIME_SCALE = simState.timeScale;
+    for (const id of [1, 2, 3, 4]) {
+      if (s.nodes && s.nodes[id]) {
+        Object.assign(simState.nodes[id], s.nodes[id]);
+      }
+      if (s.irrigationHistory && s.irrigationHistory[id]) {
+        simState.irrigationHistory[id] = s.irrigationHistory[id];
+      }
+    }
+    console.log('[SIM] Loaded simulation state from snapshot – enabled=' + simState.enabled);
+  } catch (err) {
+    console.warn('[SIM] Could not load sim state from snapshot: ' + err.message);
+  }
+}
+
+// ==============================================================
+// SECTION 2.3 – PHYSICS-BASED SIMULATION ENGINE
+// ==============================================================
+
+/**
+ * Runs one simulation tick for a single node.
+ * Called only when:
+ *   1. simState.enabled === true
+ *   2. isNodeLive(nodeId) === false (real sensor not active)
+ *
+ * Uses physics-based evaporation / irrigation / rainfall model.
+ * Never uses random values.
+ */
+async function simTick(nodeId) {
+  const ns = simState.nodes[nodeId];
+  if (!ns) return;
+
+  const now = Date.now();
+  const intervalMs = SimConfig.SIMULATION_INTERVAL_MS / SimConfig.TIME_SCALE;
+
+  if (ns.lastTickAt === null) {
+    // First tick — just record the time, don't change moisture
+    ns.lastTickAt = now;
+    console.log('[SIMULATION] Node ' + nodeId + ': First tick – moisture=' + ns.moisture.toFixed(1) + '%');
+    return;
+  }
+
+  const elapsedMs = now - ns.lastTickAt;
+  // Cap catch-up to 30 minutes of simulated time to prevent huge jumps after downtime
+  const maxElapsedMs = 30 * 60 * 1000 / SimConfig.TIME_SCALE;
+  const effectiveElapsedMs = Math.min(elapsedMs, maxElapsedMs);
+
+  // How many 5-minute ticks have elapsed?
+  const ticks = effectiveElapsedMs / intervalMs;
+  if (ticks < 0.1) return; // too soon — skip
+
+  // ── Get weather for simulation ────────────────────────────
+  let weather = weatherCache.data;
+  if (!weather) {
+    weather = { available: false, temperature: SimConfig.TEMP_REF, rainExpected: false, maxRainMm: 0 };
+  }
+  const temp     = (weather.temperature !== null && weather.temperature !== undefined) ? weather.temperature : SimConfig.TEMP_REF;
+  const humidity = 60; // reasonable default; real humidity not in OpenWeather response structure used
+  const rainMm   = weather.maxRainMm || 0;
+
+  // ── Soil and crop factors ─────────────────────────────────
+  const soilFactor = SimConfig.SOIL_FACTORS[farmSettings.soilType]  || 1.0;
+  const cropFactor = SimConfig.CROP_FACTORS[farmSettings.cropType]  || 1.0;
+
+  let moisture = ns.moisture;
+
+  // ── Phase detection ───────────────────────────────────────
+  // SATURATED: < POST_IRR_HOLD_MIN after irrigation → tiny drift only
+  // DRAINING:  ≥ POST_IRR_HOLD_MIN after irrigation → full evaporation
+  // NORMAL:    no irrigation event yet
+  const postIrrHoldMs = SimConfig.POST_IRR_HOLD_MIN * 60 * 1000;
+  const msSinceIrr    = ns.lastIrrAt ? (now - ns.lastIrrAt) : Infinity;
+
+  if (ns.lastIrrAt && msSinceIrr < postIrrHoldMs) {
+    // PHASE 1: Saturated – moisture stays elevated with tiny ±0.3% drift per tick
+    ns.phase = 'SATURATED';
+    const drift = (Math.random() - 0.5) * 0.6 * ticks;
+    moisture = Math.max(0, Math.min(100, moisture + drift));
+    console.log('[SIMULATION] Node ' + nodeId + ': SATURATED phase – moisture=' + moisture.toFixed(1) + '%');
+  } else {
+    // PHASE 2 or NORMAL: Calculate realistic evaporation
+    if (ns.lastIrrAt && msSinceIrr >= postIrrHoldMs && ns.phase === 'SATURATED') {
+      ns.phase = 'DRAINING';
+      console.log('[SIMULATION] Node ' + nodeId + ': Switching to DRAINING phase');
+    } else if (!ns.lastIrrAt) {
+      ns.phase = 'NORMAL';
+    }
+
+    // Evaporation loss per tick
+    const tempFactor    = 1 + SimConfig.TEMP_COEFF * Math.max(0, temp - SimConfig.TEMP_REF);
+    const humidFactor   = Math.max(0.1, 1 - SimConfig.HUMIDITY_COEFF * Math.max(0, humidity - 50));
+    const evapPerTick   = SimConfig.BASE_EVAP_RATE * tempFactor * soilFactor * cropFactor * humidFactor;
+    const totalEvap     = evapPerTick * ticks;
+
+    // Rainfall gain
+    const rainfallGain  = rainMm * SimConfig.RAIN_EFFICIENCY * ticks;
+
+    moisture = moisture - totalEvap + rainfallGain;
+    moisture = Math.max(0, Math.min(100, moisture));
+
+    console.log('[SIMULATION] Node ' + nodeId + ': moisture=' + ns.moisture.toFixed(1) +
+      ' → evap=' + totalEvap.toFixed(2) + ' rain=' + rainfallGain.toFixed(2) +
+      ' → new=' + moisture.toFixed(1) + '%');
+  }
+
+  // ── Irrigation decision ────────────────────────────────────
+  const rainExpected  = weather.rainExpected || false;
+  const override      = sensorData[nodeId] ? sensorData[nodeId].override : null;
+  const shouldIrr     = shouldIrrigate(moisture, rainExpected, override);
+
+  if (shouldIrr && ns.phase !== 'SATURATED') {
+    const irrDurationMin  = SimConfig.IRR_DURATION_MIN;
+    const moistureBefore  = moisture;
+    const irrGain         = SimConfig.IRR_RATE_PER_MIN * irrDurationMin;
+    moisture              = Math.min(100, moisture + irrGain);
+
+    ns.lastIrrAt         = now;
+    ns.irrDurationMin    = irrDurationMin;
+    ns.moistureBeforeIrr = moistureBefore;
+    ns.phase             = 'SATURATED';
+
+    const reason = moisture < MOISTURE_THRESHOLD
+      ? (rainExpected ? 'Low moisture – rain expected but moisture critical' : 'Low moisture + no rain expected')
+      : 'Moisture borderline';
+
+    const irrEvent = {
+      node:         nodeId,
+      startedAt:    new Date(now).toISOString(),
+      stoppedAt:    new Date(now + irrDurationMin * 60 * 1000).toISOString(),
+      durationMin:  irrDurationMin,
+      moistureBefore: parseFloat(moistureBefore.toFixed(1)),
+      moistureAfter:  parseFloat(moisture.toFixed(1)),
+      reason,
+      trigger:      'AUTO',
+      weather: {
+        temp:         temp,
+        rainExpected: rainExpected,
+        maxRainMm:    rainMm,
+        description:  weather.description || 'unknown',
+      },
+    };
+
+    simState.irrigationHistory[nodeId].unshift(irrEvent);
+    if (simState.irrigationHistory[nodeId].length > SimConfig.MAX_IRR_HISTORY) {
+      simState.irrigationHistory[nodeId].pop();
+    }
+
+    console.log('[IRRIGATION] Node ' + nodeId + ': ' + moistureBefore.toFixed(1) +
+      '% → ' + moisture.toFixed(1) + '% | ' + reason);
+  }
+
+  // ── Finalize ──────────────────────────────────────────────
+  ns.moisture    = parseFloat(moisture.toFixed(1));
+  ns.lastTickAt  = now;
+
+  // Write sim moisture into sensorData so it flows through the normal pipeline
+  const existing = sensorData[nodeId];
+  sensorData[nodeId] = {
+    node:      nodeId,
+    master:    existing ? existing.master : (nodeId <= 2 ? 1 : 2),
+    moisture:  ns.moisture,
+    updatedAt: new Date(now).toISOString(),
+    override:  existing ? existing.override : null,
+    _simulated: true,   // internal marker, never surfaced to users
+  };
+
+  // Append to graph history
+  const cache = graphHistoryCache[nodeId];
+  const lastPoint = cache.length > 0 ? new Date(cache[cache.length-1].timestamp) : null;
+  if (!lastPoint || (now - lastPoint) >= intervalMs) {
+    cache.push({
+      timestamp:    new Date(now).toISOString(),
+      masterId:     sensorData[nodeId].master,
+      nodeId,
+      moisture:     ns.moisture,
+      predictedMoisture: null,
+      irrigationOn: shouldIrr,
+    });
+    if (cache.length > MAX_GRAPH_POINTS) cache.shift();
+    saveGraphHistory();
+  }
+
+  saveSimState();
+}
+
+/**
+ * Runs a full simulation cycle across all nodes that need it.
+ * Skips any node that is currently receiving real sensor data.
+ */
+async function runSimCycle() {
+  if (!simState.enabled) return;
+  for (const nodeId of [1, 2, 3, 4]) {
+    if (isNodeLive(nodeId)) {
+      // Real data is fresh for this node — skip simulation
+      continue;
+    }
+    try {
+      await simTick(nodeId);
+    } catch (err) {
+      console.error('[SIM] Tick error for Node ' + nodeId + ': ' + err.message);
+    }
+  }
+  // Update snapshot after sim cycle
+  try {
+    const weather = weatherCache.data || null;
+    const processedNodes = await buildProcessedNodes(weather);
+    await writeJSONSnapshot(processedNodes, weather);
+    saveCheckpoint(processedNodes, weather);
+  } catch (err) {
+    console.error('[SIM] Snapshot update error: ' + err.message);
+  }
+}
+
+/**
+ * Start or restart the simulation tick interval.
+ * Respects TIME_SCALE: real interval = SIMULATION_INTERVAL_MS / TIME_SCALE
+ */
+function startSimInterval() {
+  if (simTickInterval) {
+    clearInterval(simTickInterval);
+    simTickInterval = null;
+  }
+  if (!simState.enabled) return;
+  const intervalMs = Math.max(1000, SimConfig.SIMULATION_INTERVAL_MS / SimConfig.TIME_SCALE);
+  simTickInterval = setInterval(runSimCycle, intervalMs);
+  console.log('[SIM] Simulation tick interval started – every ' + (intervalMs / 1000).toFixed(1) + 's (TIME_SCALE=' + SimConfig.TIME_SCALE + ')');
+}
 
 // Last VALID checkpoint - deep copy, updated only when data is clean
 // Used as fallback if processing fails or MongoDB is unavailable
@@ -357,34 +692,21 @@ function loadHistoryFromSnapshot() {
 }
 
 // ==============================================================
-// SECTION 3 - MOCK DATA GENERATOR
+// SECTION 3 - LEGACY MOCK DATA GENERATOR (kept for fallback)
+// ==============================================================
+// Note: The physics-based simulation engine in Section 2.3 is the
+// preferred approach. MOCK_MODE=true in .env now enables the
+// simulation engine via the developer API instead of random values.
+// The old random generator below is ONLY used if simulation is
+// explicitly not initialised (first boot, no snapshot).
 // ==============================================================
 
-const MOCK_BASE = { 1: 25, 2: 61, 3: 38, 4: 72 };
-
-function loadMockData() {
-  const now = new Date().toISOString();
-  for (const nodeId of [1, 2, 3, 4]) {
-    const base      = MOCK_BASE[nodeId];
-    const variation = Math.floor(Math.random() * 11) - 5;
-    const moisture  = Math.max(0, Math.min(100, base + variation));
-    sensorData[nodeId] = {
-      node:      nodeId,
-      master:    nodeId <= 2 ? 1 : 2,
-      moisture,
-      updatedAt: now,
-      override:  sensorData[nodeId].override,  // preserve manual override
-    };
-  }
-}
-
 if (MOCK_MODE) {
-  loadMockData();
-  setInterval(() => {
-    loadMockData();
-    processAndSnapshot().catch(err => console.error('Mock snapshot error: ' + err.message));
-  }, 15000);
-  console.log('MOCK: Fake sensor data refreshes every 15 seconds');
+  // MOCK_MODE no longer uses a random interval.
+  // Instead, the simulation engine is the mechanism.
+  // When the server starts with MOCK_MODE=true and no sim state,
+  // we auto-enable the sim engine so the dashboard shows data.
+  console.log('MOCK: Simulation engine will activate on first /api/dev/sim-toggle or auto-start');
 }
 
 // ==============================================================
@@ -584,15 +906,24 @@ async function buildProcessedNodes(weather) {
     // Fetch ML data gracefully
     const mlData = await fetchMLPrediction(d);
 
+    // Internal connection state — not surfaced to normal users
+    const connectionState = getNodeConnectionState(nodeId);
+    const dataSource = (d && d._simulated) ? 'simulated' : 'real';
+
     nodes.push({
-      node:        nodeId,
-      master:      d.master,
-      moisture:    d.moisture,
-      status:      d.moisture === null ? 'NO DATA' : (d.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK'),
+      node:            nodeId,
+      master:          d.master,
+      moisture:        d.moisture,
+      status:          d.moisture === null ? 'NO DATA' : (d.moisture < MOISTURE_THRESHOLD ? 'DRY' : 'OK'),
       irrigationOn,
-      override:    d.override || null,
-      updatedAt:   d.updatedAt,
-      ml:          mlData
+      override:        d.override || null,
+      updatedAt:       d.updatedAt,
+      ml:              mlData,
+      // Internal fields for developer panel — not displayed in normal UI
+      connectionState,
+      dataSource,
+      lastRealDataAt:  sensorLastRealAt[nodeId] ? new Date(sensorLastRealAt[nodeId]).toISOString() : null,
+      secondsAgoReal:  sensorLastRealAt[nodeId] ? Math.round((Date.now() - sensorLastRealAt[nodeId]) / 1000) : null,
     });
   }
   return nodes;
@@ -819,13 +1150,21 @@ app.post('/api/sensor-data', async (req, res) => {
     node, master, moisture,
     updatedAt: new Date().toISOString(),
     override:  existing ? existing.override : null,
+    _simulated: false,  // real sensor data — never simulated
   };
+
+  // Track when this node last received real data (for sim priority logic)
+  sensorLastRealAt[node] = Date.now();
 
   // Update the per-node daily moisture history (accumulates into daily avg)
   recordMoistureReading(node, moisture);
 
-  console.log('DATA: Master=' + master + ' Node=' + node + ' Moisture=' + moisture + '%');
-  if (MOCK_MODE) console.log('   WARN: MOCK mode is ON - real data accepted but mock timer still runs');
+  console.log('[DATA] Real sensor received – Master=' + master + ' Node=' + node + ' Moisture=' + moisture + '%');
+  if (simState.enabled && simState.nodes[node]) {
+    // Sync sim state moisture so if real data stops, sim picks up from current real value
+    simState.nodes[node].moisture = moisture;
+    console.log('[DATA] Node ' + node + ' is LIVE – simulation paused for this node');
+  }
 
   // Process async - don't block the response
   processAndSnapshot().catch(err => {
@@ -873,6 +1212,8 @@ app.get('/api/status', async (req, res) => {
     dataMode,      // 'LIVE', 'LAST_KNOWN', or 'ERROR'
     dbConnected: dbState.connected,
     checkpoint:  hasCheckpoint() ? lastValidCheckpoint.savedAt : null,
+    // Internal field used only by hidden developer panel
+    simEnabled:  simState.enabled,
   });
 });
 
@@ -1037,6 +1378,141 @@ app.get('/api/snapshot', (req, res) => {
   }
 });
 
+// ==============================================================
+// DEVELOPER-ONLY ENDPOINTS (Hidden simulation engine)
+// ==============================================================
+// These endpoints are not documented anywhere in the normal UI.
+// They are accessed only via the hidden developer panel (Ctrl+Shift+D).
+// ==============================================================
+
+// GET /api/dev/sim-state
+// Returns full simulation state for the developer panel.
+app.get('/api/dev/sim-state', (req, res) => {
+  const nodeDetails = {};
+  for (const nodeId of [1, 2, 3, 4]) {
+    const ns = simState.nodes[nodeId];
+    const live = isNodeLive(nodeId);
+    const irrHistory = (simState.irrigationHistory[nodeId] || []).slice(0, 5);
+    nodeDetails[nodeId] = {
+      moisture:        ns.moisture,
+      phase:           ns.phase,
+      isLive:          live,
+      lastRealAt:      sensorLastRealAt[nodeId] ? new Date(sensorLastRealAt[nodeId]).toISOString() : null,
+      secondsAgoReal:  sensorLastRealAt[nodeId] ? Math.round((Date.now() - sensorLastRealAt[nodeId]) / 1000) : null,
+      lastIrrAt:       ns.lastIrrAt ? new Date(ns.lastIrrAt).toISOString() : null,
+      lastTickAt:      ns.lastTickAt ? new Date(ns.lastTickAt).toISOString() : null,
+      recentIrrigation: irrHistory,
+    };
+  }
+  res.json({
+    enabled:   simState.enabled,
+    timeScale: simState.timeScale,
+    intervalSec: (SimConfig.SIMULATION_INTERVAL_MS / SimConfig.TIME_SCALE / 1000).toFixed(1),
+    nodes:     nodeDetails,
+    farmSettings,
+    serverTime: new Date().toISOString(),
+  });
+});
+
+// POST /api/dev/sim-toggle
+// Enable or disable the simulation engine, and optionally set time scale.
+// Body: { "enabled": true, "timeScale": 60 }
+app.post('/api/dev/sim-toggle', (req, res) => {
+  const { enabled, timeScale } = req.body || {};
+
+  if (typeof enabled === 'boolean') {
+    simState.enabled = enabled;
+    console.log('[SIM] Simulation ' + (enabled ? 'ENABLED' : 'DISABLED') + ' via dev toggle');
+  }
+
+  if (typeof timeScale === 'number' && timeScale >= 1 && timeScale <= 3600) {
+    simState.timeScale  = timeScale;
+    SimConfig.TIME_SCALE = timeScale;
+    console.log('[SIM] TIME_SCALE set to ' + timeScale);
+  }
+
+  // Initialize lastTickAt for any node that hasn't been ticked yet
+  if (simState.enabled) {
+    for (const nodeId of [1, 2, 3, 4]) {
+      const ns = simState.nodes[nodeId];
+      if (ns.lastTickAt === null) {
+        ns.lastTickAt = Date.now();
+        // Sync current real moisture if available
+        if (sensorData[nodeId] && sensorData[nodeId].moisture !== null) {
+          ns.moisture = sensorData[nodeId].moisture;
+        }
+      }
+    }
+    startSimInterval();
+    // Run an immediate cycle so the dashboard updates right away
+    runSimCycle().catch(err => console.error('[SIM] Immediate cycle error: ' + err.message));
+  } else {
+    if (simTickInterval) {
+      clearInterval(simTickInterval);
+      simTickInterval = null;
+      console.log('[SIM] Tick interval stopped');
+    }
+  }
+
+  saveSimState();
+
+  res.json({
+    success:   true,
+    enabled:   simState.enabled,
+    timeScale: simState.timeScale,
+    intervalSec: (SimConfig.SIMULATION_INTERVAL_MS / SimConfig.TIME_SCALE / 1000).toFixed(1),
+  });
+});
+
+// GET /api/irrigation-history
+// Returns irrigation events for a specific node.
+// ?node=1&limit=10
+app.get('/api/irrigation-history', (req, res) => {
+  const nodeId = parseInt(req.query.node);
+  const limit  = Math.min(parseInt(req.query.limit) || 10, 50);
+
+  if (isNaN(nodeId) || nodeId < 1 || nodeId > 4) {
+    return res.status(400).json({ error: 'node must be 1, 2, 3, or 4' });
+  }
+
+  const history = (simState.irrigationHistory[nodeId] || []).slice(0, limit);
+  res.json({
+    node:    nodeId,
+    count:   history.length,
+    events:  history,
+  });
+});
+
+// POST /api/dev/sim-reset
+// Resets simulation state for one or all nodes (dev use only).
+// Body: { "nodeId": 3 } or {} for all nodes
+app.post('/api/dev/sim-reset', (req, res) => {
+  const { nodeId } = req.body || {};
+  const defaults = [
+    { id: 1, moisture: 28 },
+    { id: 2, moisture: 62 },
+    { id: 3, moisture: 38 },
+    { id: 4, moisture: 71 },
+  ];
+  const targets = nodeId ? defaults.filter(n => n.id === parseInt(nodeId)) : defaults;
+
+  for (const t of targets) {
+    simState.nodes[t.id] = {
+      moisture: t.moisture,
+      lastTickAt: null,
+      lastIrrAt: null,
+      irrDurationMin: 0,
+      moistureBeforeIrr: null,
+      phase: 'NORMAL',
+    };
+    simState.irrigationHistory[t.id] = [];
+    sensorLastRealAt[t.id] = null;
+    console.log('[SIM] Reset Node ' + t.id + ' to moisture=' + t.moisture + '%');
+  }
+  saveSimState();
+  res.json({ success: true, reset: targets.map(t => t.id) });
+});
+
 // POST /api/dev/inject-history
 // ─────────────────────────────────────────────────────────────
 // DEVELOPMENT / TESTING ONLY – gated behind MOCK_MODE.
@@ -1184,6 +1660,7 @@ app.get('/api/health', async (req, res) => {
 async function start() {
   loadHistoryFromSnapshot();  // Restore daily moisture history before anything else
   loadGraphHistory();         // Restore downsampled graph history
+  loadSimState();             // Restore simulation engine state from snapshot
   await connectMongoDB();
 
   app.listen(PORT, () => {
@@ -1197,8 +1674,28 @@ async function start() {
     console.log('');
   });
 
-  // Initial snapshot on startup
-  if (MOCK_MODE) {
+  // If simulation was enabled before restart, resume it
+  if (simState.enabled) {
+    console.log('[SIM] Resuming simulation engine (was enabled before restart)');
+    startSimInterval();
+    // Give weather cache a moment to load before first tick
+    setTimeout(() => {
+      runSimCycle().catch(err => console.error('[SIM] Resume cycle error: ' + err.message));
+    }, 2000);
+  } else if (MOCK_MODE) {
+    // In MOCK_MODE with no existing sim state, auto-enable simulation
+    // so the dashboard shows data out of the box.
+    console.log('[SIM] MOCK_MODE=true and no prior sim state – auto-enabling simulation engine');
+    simState.enabled = true;
+    for (const nodeId of [1, 2, 3, 4]) {
+      simState.nodes[nodeId].lastTickAt = Date.now();
+    }
+    startSimInterval();
+    setTimeout(() => {
+      runSimCycle().catch(err => console.error('[SIM] Auto-start cycle error: ' + err.message));
+    }, 2000);
+  } else {
+    // Initial snapshot on startup (real mode)
     setTimeout(() => {
       processAndSnapshot().catch(err => console.error('Startup snapshot error: ' + err.message));
     }, 1000);
