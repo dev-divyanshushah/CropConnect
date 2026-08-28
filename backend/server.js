@@ -46,8 +46,13 @@ app.use(express.static('../frontend'));
 // ── Settings from .env ──────────────────────────────────────────
 const PORT                  = parseInt(process.env.PORT) || 3000;
 const MOCK_MODE             = process.env.MOCK_MODE === 'true';
-// Threshold: 65% (irrigate if moisture < 65%)
+// EMERGENCY FALLBACK threshold: 65% — used ONLY when no baseline exists AND ML is unavailable.
+// Under normal operation this value is never used for irrigation decisions.
 const MOISTURE_THRESHOLD    = parseInt(process.env.MOISTURE_THRESHOLD) || 65;
+// Factor applied to node baseline for ML-driven irrigation threshold.
+// Irrigate when predicted moisture < (baseline × ML_THRESHOLD_FACTOR).
+// Configurable via ML_THRESHOLD_FACTOR env var. Default: 0.90 (90% of baseline).
+const ML_THRESHOLD_FACTOR   = parseFloat(process.env.ML_THRESHOLD_FACTOR) || 0.90;
 const OPENWEATHER_API_KEY   = process.env.OPENWEATHER_API_KEY || '';
 const DEFAULT_CITY          = process.env.CITY || 'Mumbai';
 const DEFAULT_STATE         = process.env.STATE || 'Maharashtra';
@@ -615,9 +620,9 @@ let weatherCache = { data: null, fetchedAt: null };
 //     2. When a new calendar date is detected, finalise the
 //        previous day's average and append it to completedDays
 //        (kept at most MAX_HISTORY_DAYS = 7 entries).
-//     3. getMLFeatures() derives lag1/lag3/lag7/roll7_mean from
-//        completedDays – ONLY when >= 7 completed days exist.
-//        Returns null otherwise so ML stays disabled.
+//     3. getMLFeaturesEarly() derives lag1/lag3/lag7/roll7_mean progressively
+//        from the first reading onward (warm-start strategy).
+//        getMLFeaturesStrict() requires >= 7 completed days (dev/internal use).
 //     4. Moisture is stored as a FRACTION (0–1), matching the
 //        V2 training dataset (ESP8266 % values ÷ 100).
 //     5. History is kept SEPARATE per node; nodes never mix.
@@ -630,7 +635,7 @@ let weatherCache = { data: null, fetchedAt: null };
 //   completedDays – [{date:"YYYY-MM-DD", avg:0.31}, …]  max 7
 // ==============================================================
 
-const MAX_HISTORY_DAYS = 7;   // completed days needed before ML activates
+const MAX_HISTORY_DAYS = 7;   // completed days for full-history lag features (strict mode)
 
 // One slot per node (keyed by integer node ID)
 let moistureHistoryCache = {
@@ -638,6 +643,32 @@ let moistureHistoryCache = {
   2: { currentDay: null, dayReadings: [], completedDays: [] },
   3: { currentDay: null, dayReadings: [], completedDays: [] },
   4: { currentDay: null, dayReadings: [], completedDays: [] },
+};
+
+// ==============================================================
+// SECTION 2.7 – PER-NODE BASELINE MOISTURE STATE
+// ==============================================================
+//
+// The FIRST valid sensor reading for each node establishes its
+// reference/baseline moisture. ML irrigation decisions compare
+// predicted moisture against (baseline × ML_THRESHOLD_FACTOR)
+// instead of the hard-coded 65% fallback.
+//
+// Rules:
+//   - Each node has its own completely independent baseline.
+//   - Node 3 and Node 4 baselines are NEVER mixed.
+//   - Baseline is set exactly once (on first valid reading).
+//   - Persisted in the JSON snapshot so server restarts preserve it.
+//   - 65% fallback is used ONLY when nodeBaseline[nodeId] === null
+//     AND ML is unavailable.
+//
+// Shape: { moisture: number (%), establishedAt: ISO string }
+// ==============================================================
+let nodeBaseline = {
+  1: null,
+  2: null,
+  3: null,
+  4: null,
 };
 
 // ==============================================================
@@ -724,19 +755,12 @@ function recordMoistureReading(nodeId, moisturePct) {
 }
 
 /**
- * Returns { lag1, lag3, lag7, roll7_mean } derived from the sliding
- * window of completed daily averages, or null if < 7 days exist.
- *
- * Window layout (oldest → newest, 7 entries):
- *   completedDays[0] = 7 days ago  → lag7
- *   completedDays[2] = 5 days ago  (unused)
- *   completedDays[4] = 3 days ago  → lag3
- *   completedDays[6] = yesterday   → lag1
- *   roll7_mean = mean of all 7 entries
- *
- * IMPORTANT: the current day's buffer is NOT included.
+ * STRICT mode: returns full lag features only when >= 7 completed days exist.
+ * Returns null otherwise.
+ * Used internally by dev endpoints (/api/dev/inject-history).
+ * For real-time prediction use getMLFeaturesEarly() instead.
  */
-function getMLFeatures(nodeId) {
+function getMLFeaturesStrict(nodeId) {
   const cache = moistureHistoryCache[nodeId];
   if (!cache || cache.completedDays.length < MAX_HISTORY_DAYS) return null;
 
@@ -747,7 +771,84 @@ function getMLFeatures(nodeId) {
   const roll7_mean = parseFloat(
     (days.reduce((s, d) => s + d.avg, 0) / days.length).toFixed(6)
   );
-  return { lag1, lag3, lag7, roll7_mean };
+  return { lag1, lag3, lag7, roll7_mean, mode: 'strict' };
+}
+
+/**
+ * EARLY mode: always returns usable ML feature values from the very FIRST
+ * sensor reading onward. Uses a progressive warm-start strategy:
+ *
+ *   completed days = 0  (first reading ever):
+ *     All lags = currentFraction. The current reading is the best available
+ *     prior – no invented values, just the real sensor value repeated.
+ *
+ *   completed days = 1–6  (partial history):
+ *     lag1 = most recent completed-day average
+ *     lag3 = day[n-3] if available, else oldest available day
+ *     lag7 = day[n-7] if available, else oldest available day
+ *     roll7_mean = mean of all available completed days
+ *
+ *   completed days >= 7  (full history):
+ *     Identical to getMLFeaturesStrict() – real values used exclusively.
+ *
+ * This strategy introduces no random or invented data. All values are
+ * derived exclusively from real sensor readings. Prediction accuracy
+ * improves naturally as history accumulates over real calendar days.
+ *
+ * The lag values are fractions (0–1) to match the training dataset scale.
+ *
+ * @param {number} nodeId
+ * @param {number} currentMoisturePct  – 0–100 percent value from the sensor
+ * @returns {{ lag1, lag3, lag7, roll7_mean, mode, completedDays }}
+ */
+function getMLFeaturesEarly(nodeId, currentMoisturePct) {
+  const cache           = moistureHistoryCache[nodeId];
+  const currentFraction = currentMoisturePct / 100;
+
+  if (!cache || cache.completedDays.length === 0) {
+    // No completed days yet – use current reading as warm-start prior for all lags
+    return {
+      lag1:        currentFraction,
+      lag3:        currentFraction,
+      lag7:        currentFraction,
+      roll7_mean:  currentFraction,
+      mode:        'bootstrap',
+      completedDays: 0,
+    };
+  }
+
+  if (cache.completedDays.length >= MAX_HISTORY_DAYS) {
+    // Full history available – use exact values (same as strict mode)
+    const days       = cache.completedDays.slice(-MAX_HISTORY_DAYS);
+    const roll7_mean = parseFloat(
+      (days.reduce((s, d) => s + d.avg, 0) / days.length).toFixed(6)
+    );
+    return {
+      lag1:         days[6].avg,
+      lag3:         days[4].avg,
+      lag7:         days[0].avg,
+      roll7_mean,
+      mode:         'full',
+      completedDays: cache.completedDays.length,
+    };
+  }
+
+  // Partial history: 1–6 completed days
+  const days = cache.completedDays;
+  const n    = days.length;
+
+  // lag1: most recent completed day
+  const lag1 = days[n - 1].avg;
+  // lag3: 3 days ago if available, else oldest day
+  const lag3 = n >= 3 ? days[n - 3].avg : days[0].avg;
+  // lag7: 7 days ago if available, else oldest day
+  const lag7 = n >= 7 ? days[n - 7].avg : days[0].avg;
+  // roll7_mean: mean of all available completed days
+  const roll7_mean = parseFloat(
+    (days.reduce((s, d) => s + d.avg, 0) / n).toFixed(6)
+  );
+
+  return { lag1, lag3, lag7, roll7_mean, mode: 'partial', completedDays: n };
 }
 
 /**
@@ -760,20 +861,47 @@ function loadHistoryFromSnapshot() {
     if (!fs.existsSync(SNAPSHOT_FILE)) return;
     const raw  = fs.readFileSync(SNAPSHOT_FILE, 'utf8');
     const data = JSON.parse(raw);
+
+    // ── Restore moisture history cache ──────────────────────────────
     if (!data.historyCache) {
       console.log('HISTORY: No history cache found in snapshot – starting fresh.');
-      return;
+    } else {
+      let totalDays = 0;
+      for (const nodeId of [1, 2, 3, 4]) {
+        const saved = data.historyCache[nodeId] || data.historyCache[String(nodeId)];
+        if (!saved) continue;
+        moistureHistoryCache[nodeId].completedDays = Array.isArray(saved.completedDays) ? saved.completedDays : [];
+        moistureHistoryCache[nodeId].currentDay    = saved.currentDay  || null;
+        moistureHistoryCache[nodeId].dayReadings   = Array.isArray(saved.dayReadings)   ? saved.dayReadings   : [];
+        totalDays += moistureHistoryCache[nodeId].completedDays.length;
+      }
+      console.log('HISTORY: Loaded history from snapshot – total completed days across all nodes: ' + totalDays);
     }
-    let totalDays = 0;
-    for (const nodeId of [1, 2, 3, 4]) {
-      const saved = data.historyCache[nodeId] || data.historyCache[String(nodeId)];
-      if (!saved) continue;
-      moistureHistoryCache[nodeId].completedDays = Array.isArray(saved.completedDays) ? saved.completedDays : [];
-      moistureHistoryCache[nodeId].currentDay    = saved.currentDay  || null;
-      moistureHistoryCache[nodeId].dayReadings   = Array.isArray(saved.dayReadings)   ? saved.dayReadings   : [];
-      totalDays += moistureHistoryCache[nodeId].completedDays.length;
+
+    // ── Restore per-node baseline moisture ──────────────────────────
+    // Baselines are persisted alongside historyCache in the snapshot.
+    // If restored successfully, the first-reading baseline is preserved
+    // across server restarts and ML continues from where it left off.
+    if (data.nodeBaseline) {
+      let restoredCount = 0;
+      for (const nodeId of [1, 2, 3, 4]) {
+        const saved = data.nodeBaseline[nodeId] || data.nodeBaseline[String(nodeId)];
+        if (saved && typeof saved.moisture === 'number') {
+          nodeBaseline[nodeId] = {
+            moisture:      saved.moisture,
+            establishedAt: saved.establishedAt || null,
+          };
+          restoredCount++;
+          console.log('[BASELINE] Node ' + nodeId + ': Restored from snapshot – baseline=' + saved.moisture + '%');
+        }
+      }
+      if (restoredCount > 0) {
+        console.log('[BASELINE] Baselines restored for ' + restoredCount + ' node(s) – ML can predict immediately.');
+      }
+    } else {
+      console.log('[BASELINE] No baseline data in snapshot – will be established on first real sensor reading.');
     }
-    console.log('HISTORY: Loaded history from snapshot – total completed days across all nodes: ' + totalDays);
+
   } catch (err) {
     console.warn('HISTORY: Could not load history from snapshot (will start fresh): ' + err.message);
   }
@@ -864,40 +992,51 @@ async function fetchWeather() {
 // ==============================================================
 // SECTION 4.5 - ML PREDICTION INTEGRATION
 // ==============================================================
+//
+// ML is ALWAYS attempted from the first valid sensor reading onward.
+//
+// Feature construction strategy:
+//   - First reading ever (completedDays=0): warm-start bootstrap
+//     All lag values = current reading fraction. No invented values.
+//   - Partial history (1-6 days): progressive best-effort lags
+//     derived only from real readings.
+//   - Full history (7+ days): exact daily-average lag values.
+//
+// The model output is a soil-moisture FRACTION (0-1), NOT an ON/OFF signal.
+// The irrigation decision is made in shouldIrrigateML() by comparing the
+// predicted moisture to (nodeBaseline × ML_THRESHOLD_FACTOR).
+// ==============================================================
 
 async function fetchMLPrediction(nodeData) {
+  // Guard: if no moisture data for this node, cannot build features
+  if (nodeData.moisture === null || nodeData.moisture === undefined) {
+    return { available: false, error: 'No moisture data for this node.' };
+  }
+
   const now         = new Date();
   const yearStart   = new Date(now.getFullYear(), 0, 0);
   const day_of_year = Math.floor((now - yearStart) / (1000 * 60 * 60 * 24));
   const month       = now.getMonth() + 1;
 
-  // ── 1. Soil composition from farm settings (static config mapping) ────
+  // ── 1. Soil composition from farm settings ────────────────────────
   const soilCompositionMap = {
     'Loamy': { clay_content: 20.0, sand_content: 40.0, silt_content: 40.0 },
     'Clay':  { clay_content: 60.0, sand_content: 20.0, silt_content: 20.0 },
     'Sandy': { clay_content: 10.0, sand_content: 80.0, silt_content: 10.0 },
+    'Silty': { clay_content: 15.0, sand_content: 15.0, silt_content: 70.0 },
+    'Peaty': { clay_content: 30.0, sand_content: 20.0, silt_content: 50.0 },
+    'Chalky':{ clay_content: 10.0, sand_content: 50.0, silt_content: 40.0 },
   };
   const soilProps = soilCompositionMap[farmSettings.soilType] || soilCompositionMap['Loamy'];
 
-  // ── 2. Historical lag features – derived from completed daily averages ─
-  //  NEVER uses fake values. Returns null if < 7 days of history exist.
-  const histFeatures    = getMLFeatures(nodeData.node);
-  const completedCount  = (moistureHistoryCache[nodeData.node] || {}).completedDays
+  // ── 2. Build lag features using EARLY mode ────────────────────────
+  // ALWAYS returns a valid feature object from the first reading onward.
+  // No 7-day wait. No null return. No ML skip.
+  const histFeatures   = getMLFeaturesEarly(nodeData.node, nodeData.moisture);
+  const completedCount = (moistureHistoryCache[nodeData.node] || {}).completedDays
     ? moistureHistoryCache[nodeData.node].completedDays.length : 0;
 
-  if (!histFeatures) {
-    console.log('ML [Node ' + nodeData.node + ']: UNAVAILABLE – insufficient history ('
-      + completedCount + '/' + MAX_HISTORY_DAYS + ' completed days). '
-      + 'Rule-based fallback active.');
-    return {
-      available:    false,
-      completedDays: completedCount,
-      error: 'Insufficient history: ' + completedCount + '/' + MAX_HISTORY_DAYS
-           + ' completed days. Rule-based irrigation active.',
-    };
-  }
-
-  // ── 3. Build FastAPI request payload ─────────────────────────────────
+  // ── 3. Build FastAPI request payload ──────────────────────────────
   const payload = {
     clay_content:      soilProps.clay_content,
     sand_content:      soilProps.sand_content,
@@ -910,14 +1049,23 @@ async function fetchMLPrediction(nodeData) {
     day_of_year,
   };
 
-  // ── 4. Call FastAPI ML service ────────────────────────────────────────
-  try {
-    console.log('ML [Node ' + nodeData.node + ']: Calling FastAPI – '
-      + 'lag1=' + histFeatures.lag1.toFixed(3)
-      + ' lag3=' + histFeatures.lag3.toFixed(3)
-      + ' lag7=' + histFeatures.lag7.toFixed(3)
-      + ' roll7=' + histFeatures.roll7_mean.toFixed(3));
+  // ── 4. Structured logging ────────────────────────────────────
+  const baseline    = nodeBaseline[nodeData.node];
+  const baselinePct = baseline ? baseline.moisture : null;
 
+  console.log('[ML] ──── Sensor reading received ───────────────────────────');
+  console.log('[ML] Node         : ' + nodeData.node);
+  console.log('[ML] Current      : ' + nodeData.moisture + '%');
+  console.log('[ML] Baseline     : ' + (baselinePct !== null ? baselinePct + '%' : 'not yet established'));
+  console.log('[ML] History      : ' + completedCount + '/' + MAX_HISTORY_DAYS + ' completed days (mode=' + histFeatures.mode + ')');
+  console.log('[ML] Lag features : lag1=' + histFeatures.lag1.toFixed(4)
+    + ' lag3=' + histFeatures.lag3.toFixed(4)
+    + ' lag7=' + histFeatures.lag7.toFixed(4)
+    + ' roll7=' + histFeatures.roll7_mean.toFixed(4));
+  console.log('[ML] Calling ML API: ' + ML_API_URL + '/predict');
+
+  // ── 5. Call FastAPI ML service ──────────────────────────────────
+  try {
     const mlRes = await fetch(ML_API_URL + '/predict', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -931,14 +1079,15 @@ async function fetchMLPrediction(nodeData) {
     const predFraction = result.predicted_soil_moisture;
     const predPct      = Math.round(predFraction * 1000) / 10;  // one decimal (%)
 
-    console.log('ML [Node ' + nodeData.node + ']: ✓ Prediction = '
-      + predFraction.toFixed(4) + ' (' + predPct + '%)');
+    console.log('[ML] Prediction   : ' + predFraction.toFixed(4) + ' (' + predPct + '%)');
 
     return {
       available:            true,
       predictedMoisture:    predFraction,
       predictedMoisturePct: predPct,
       model:                result.model || 'XGBoost',
+      historyMode:          histFeatures.mode,
+      completedDays:        completedCount,
       lag1:                 histFeatures.lag1,
       lag3:                 histFeatures.lag3,
       lag7:                 histFeatures.lag7,
@@ -946,11 +1095,12 @@ async function fetchMLPrediction(nodeData) {
     };
 
   } catch (err) {
-    console.error('ML [Node ' + nodeData.node + ']: FastAPI call FAILED – '
-      + err.message + '. Rule-based fallback active.');
+    console.error('[ML] Prediction FAILED – ' + err.message);
     return {
-      available: false,
-      error: 'ML service unreachable: ' + err.message + '. Rule-based fallback active.',
+      available:     false,
+      historyMode:   histFeatures.mode,
+      completedDays: completedCount,
+      error:         'ML service unreachable: ' + err.message,
     };
   }
 }
@@ -959,25 +1109,117 @@ async function fetchMLPrediction(nodeData) {
 // SECTION 5 - IRRIGATION DECISION LOGIC
 // ==============================================================
 //
-// Priority order:
-//   1. Manual override 'ON'  -> always ON
-//   2. Manual override 'OFF' -> always OFF
-//   3. No data (null)        -> OFF  (safe default, never open unknown valve)
-//   4. Rain expected         -> OFF  (save water)
-//   5. moisture < threshold  -> ON   (dry soil, irrigate)
-//   6. Otherwise             -> OFF
+// TWO decision functions exist:
 //
-// SAFETY: On error/unreliable data, always returns OFF.
+//   shouldIrrigate()    – LEGACY simple threshold check.
+//                          Used ONLY by the simulation engine (simTick).
+//                          Retained to avoid breaking the dev simulation.
+//
+//   shouldIrrigateML()  – PRIMARY decision for ALL real sensor readings.
+//                          Uses ML prediction + per-node baseline.
+//                          65% fallback used ONLY when no baseline exists
+//                          AND ML is unavailable.
+//
+// Priority order for shouldIrrigateML:
+//   1. Manual override 'ON'  → always ON
+//   2. Manual override 'OFF' → always OFF
+//   3. No data (null)        → OFF (safe default)
+//   4. Rain expected         → OFF (save water)
+//   5. ML available + baseline   → ON if predictedPct < baseline × factor
+//   6. ML available, no baseline → ON if predictedPct < MOISTURE_THRESHOLD
+//   7. ML unavailable + baseline → ON if currentPct < baseline × factor
+//   8. No baseline, no ML [FALLBACK] → ON if currentPct < 65%
+//
 // ==============================================================
 
+/**
+ * LEGACY: Simple threshold-based irrigation check.
+ * Used ONLY by the simulation engine (simTick). Do not use for real sensors.
+ */
 function shouldIrrigate(moisture, rainExpected, override) {
   if (override === 'ON')  return true;
   if (override === 'OFF') return false;
   if (moisture === null || moisture === undefined) return false;
-  
-  // The user requested valves automatically turn on based ONLY on the 65% threshold
-  // without being paused by the rain forecast. 
   return moisture < MOISTURE_THRESHOLD;
+}
+
+/**
+ * ML-DRIVEN irrigation decision. Used for ALL real sensor readings.
+ *
+ * The model predicts future soil moisture (fraction 0–1 converted to %).
+ * This function compares that prediction to the node's established baseline
+ * to determine whether irrigation is needed.
+ *
+ * @param {number|null} currentMoisture   – sensor reading in %
+ * @param {object}      mlData            – result from fetchMLPrediction()
+ * @param {object|null} baseline          – nodeBaseline[nodeId] or null
+ * @param {string|null} override          – 'ON', 'OFF', or null
+ * @param {boolean}     rainExpected      – from weather cache
+ * @returns {{ on: boolean, reason: string }}
+ */
+function shouldIrrigateML(currentMoisture, mlData, baseline, override, rainExpected) {
+  // 1. Manual overrides – always respected first
+  if (override === 'ON')  return { on: true,  reason: 'MANUAL OVERRIDE ON' };
+  if (override === 'OFF') return { on: false, reason: 'MANUAL OVERRIDE OFF' };
+
+  // 2. No sensor data – safe default OFF, never open an unknown valve
+  if (currentMoisture === null || currentMoisture === undefined)
+    return { on: false, reason: 'NO SENSOR DATA – safe default OFF' };
+
+  // 3. Rain expected – skip irrigation to save water
+  if (rainExpected)
+    return { on: false, reason: 'RAIN EXPECTED – irrigation paused' };
+
+  // 4. ML available – primary decision path
+  if (mlData && mlData.available) {
+    const predPct = mlData.predictedMoisturePct;  // already in %
+
+    if (baseline !== null) {
+      // Compare ML-predicted moisture to baseline-relative threshold
+      const thresholdPct = parseFloat((baseline.moisture * ML_THRESHOLD_FACTOR).toFixed(2));
+      const irrigate     = predPct < thresholdPct;
+      return {
+        on:     irrigate,
+        reason: irrigate
+          ? 'ML: predicted ' + predPct + '% < threshold ' + thresholdPct + '% (baseline ' + baseline.moisture + '% × ' + ML_THRESHOLD_FACTOR + ') → IRRIGATION ON'
+          : 'ML: predicted ' + predPct + '% ≥ threshold ' + thresholdPct + '% (baseline ' + baseline.moisture + '% × ' + ML_THRESHOLD_FACTOR + ') → OFF',
+      };
+    } else {
+      // No baseline established yet (edge case after restart with cleared snapshot).
+      // Use MOISTURE_THRESHOLD as temporary reference until baseline is set.
+      const irrigate = predPct < MOISTURE_THRESHOLD;
+      return {
+        on:     irrigate,
+        reason: irrigate
+          ? 'ML (no baseline yet): predicted ' + predPct + '% < ' + MOISTURE_THRESHOLD + '% → IRRIGATION ON'
+          : 'ML (no baseline yet): predicted ' + predPct + '% ≥ ' + MOISTURE_THRESHOLD + '% → OFF',
+      };
+    }
+  }
+
+  // 5. ML unavailable – use baseline with current sensor reading
+  if (baseline !== null) {
+    const thresholdPct = parseFloat((baseline.moisture * ML_THRESHOLD_FACTOR).toFixed(2));
+    const irrigate     = currentMoisture < thresholdPct;
+    console.warn('[FALLBACK] ML unavailable – using current moisture vs baseline threshold.');
+    return {
+      on:     irrigate,
+      reason: irrigate
+        ? 'ML unavailable; current ' + currentMoisture + '% < baseline-threshold ' + thresholdPct + '% → IRRIGATION ON'
+        : 'ML unavailable; current ' + currentMoisture + '% ≥ baseline-threshold ' + thresholdPct + '% → OFF',
+    };
+  }
+
+  // 6. LAST-RESORT FALLBACK: no baseline AND no ML prediction.
+  // This only happens when the node has NEVER received a valid reading
+  // (e.g., brand new deployment, snapshot cleared, server just started).
+  console.warn('[FALLBACK] No baseline and no ML prediction available.');
+  console.warn('[FALLBACK] Using ' + MOISTURE_THRESHOLD + '% ONLY because no valid ML decision/baseline exists.');
+  const irrigate = currentMoisture < MOISTURE_THRESHOLD;
+  return {
+    on:     irrigate,
+    reason: 'FALLBACK (no baseline, no ML): current ' + currentMoisture + '% vs hard-coded ' + MOISTURE_THRESHOLD + '%',
+  };
 }
 
 // ==============================================================
@@ -989,20 +1231,28 @@ async function buildProcessedNodes(weather) {
   const nodes = [];
   for (const nodeId of [1, 2, 3, 4]) {
     const d = sensorData[nodeId];
-    const irrigationOn = shouldIrrigate(d.moisture, rainExpected, d.override);
-    
-    // Fetch ML data gracefully
+
+    // Fetch ML prediction (always attempted for nodes with moisture data)
     const mlData = await fetchMLPrediction(d);
+
+    // ML-driven irrigation decision using per-node baseline
+    const baseline = nodeBaseline[nodeId];
+    const decision = shouldIrrigateML(d.moisture, mlData, baseline, d.override, rainExpected);
+    const irrigationOn = decision.on;
+
+    // Log the final decision for every reading that has data
+    if (d.moisture !== null) {
+      console.log('[ML] Decision     : ' + (irrigationOn ? 'IRRIGATION ON' : 'IRRIGATION OFF'));
+      console.log('[ML] Reason       : ' + decision.reason);
+      console.log('[ML] ───────────────────────────────────────────────────────');
+    }
 
     // Internal connection state — not surfaced to normal users
     const connectionState = getNodeConnectionState(nodeId);
     const dataSource = (d && d._simulated) ? 'simulated' : 'real';
 
     // For simulated nodes: always report updatedAt as now so the frontend
-    // never marks them as stale/offline. The moisture value only changes
-    // every 5 minutes per the physics model, but the connection heartbeat
-    // should appear continuous. This is intentional — the normal user
-    // should not see "Sensor Offline" for a simulated node.
+    // never marks them as stale/offline.
     const reportedUpdatedAt = (d._simulated && simState.enabled)
       ? new Date().toISOString()
       : d.updatedAt;
@@ -1061,6 +1311,9 @@ async function writeJSONSnapshot(processedNodes, weather) {
     }
     // Persist the history cache so server restarts preserve daily averages
     snapshot.historyCache = moistureHistoryCache;
+    // Persist per-node baselines so restarts preserve established reference values
+    // The baseline is the cornerstone of the ML irrigation decision logic.
+    snapshot.nodeBaseline = nodeBaseline;
     fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshot, null, 2), 'utf8');
     console.log('SNAP: JSON snapshot updated: ' + SNAPSHOT_FILE);
     return true;
@@ -1252,6 +1505,23 @@ app.post('/api/sensor-data', async (req, res) => {
 
   // Track when this node last received real data (for sim priority logic)
   sensorLastRealAt[node] = Date.now();
+
+  // ── Establish per-node baseline on FIRST valid reading ────────────────
+  // The first valid moisture reading becomes the reference/baseline for this node.
+  // All subsequent ML-based irrigation decisions compare against this value.
+  // Each node has a completely independent baseline.
+  if (nodeBaseline[node] === null) {
+    nodeBaseline[node] = {
+      moisture:      moisture,
+      establishedAt: new Date().toISOString(),
+    };
+    console.log('[BASELINE] ────────────────────────────────────────────');
+    console.log('[BASELINE] Node ' + node);
+    console.log('[BASELINE] First moisture reading  : ' + moisture + '%');
+    console.log('[BASELINE] Baseline established    : ' + nodeBaseline[node].establishedAt);
+    console.log('[BASELINE] ML will use warm-start features on this reading.');
+    console.log('[BASELINE] ────────────────────────────────────────────');
+  }
 
   // Update the per-node daily moisture history (accumulates into daily avg)
   recordMoistureReading(node, moisture);
@@ -1666,7 +1936,8 @@ app.post('/api/dev/inject-history', (req, res) => {
     nodeId:        id,
     completedDays: moistureHistoryCache[id].completedDays.length,
     mlFeaturesReady: ready,
-    features:      ready ? getMLFeatures(id) : null,
+    // getMLFeaturesStrict returns full 7-day features or null (same as old getMLFeatures)
+    features:      ready ? getMLFeaturesStrict(id) : getMLFeaturesEarly(id, 0),
   });
 });
 
