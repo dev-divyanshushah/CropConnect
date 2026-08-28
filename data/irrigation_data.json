@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-26T17:30:14.736Z",
+  "timestamp": "2026-08-26T17:49:15.269Z",
   "dataSource": "MOCK",
   "threshold": 65,
   "weather": {
@@ -14,38 +14,38 @@
     "node1": {
       "nodeId": 1,
       "masterId": 1,
-      "moisture": 27,
+      "moisture": 29,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-26T17:49:15.265Z"
     },
     "node2": {
       "nodeId": 2,
       "masterId": 1,
-      "moisture": 66,
-      "status": "OK",
-      "irrigation": "OFF",
+      "moisture": 62,
+      "status": "DRY",
+      "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-26T17:49:15.265Z"
     },
     "node3": {
       "nodeId": 3,
       "masterId": 2,
-      "moisture": 43,
+      "moisture": 39,
       "status": "DRY",
       "irrigation": "ON",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-26T17:49:15.265Z"
     },
     "node4": {
       "nodeId": 4,
       "masterId": 2,
-      "moisture": 72,
+      "moisture": 74,
       "status": "OK",
       "irrigation": "OFF",
       "override": null,
-      "updatedAt": "2026-08-26T17:30:14.733Z"
+      "updatedAt": "2026-08-26T17:49:15.265Z"
     }
   },
   "historyCache": {
