@@ -121,7 +121,14 @@ async function refreshDashboard() {
       return node && node.moisture !== null && node.moisture !== undefined && Number.isFinite(Number(node.moisture));
     });
     const mode = data.dataMode || "LIVE";
-    if (mode === "LIVE") {
+    if (data.mockMode === true) {
+      setConnection("warning", "Backend mock mode");
+      setSystemStatus(
+        hasReading ? "Backend mock mode is enabled" : "Waiting for sensor readings",
+        "The backend is configured for simulated data. For a real-hardware run, set MOCK_MODE=false in the deployed backend environment and restart the service.",
+        "warn"
+      );
+    } else if (mode === "LIVE") {
       setConnection("connected", "Backend connected");
       setSystemStatus(
         hasReading ? "Sensor data received" : "Connected — waiting for sensor readings",
