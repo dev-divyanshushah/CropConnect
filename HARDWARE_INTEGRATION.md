@@ -1,297 +1,120 @@
-# CropConnect — Hardware Integration
+# CropConnect Hardware Integration — One Master, Two Sensor Nodes
 
-Complete architecture, data flow, and integration reference for the
-ESP32 + ESP-NOW hardware extension to CropConnect.
+This is the current hardware setup for CropConnect. Use **three ESP8266 boards only**: one master and two soil-moisture sensor nodes. The former ESP32/ESP-NOW/actuator path is retired.
 
----
+## 1. Architecture
 
-## 1. Physical Architecture
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     CropConnect Cloud                         │
-│  https://cropconnect-backend-p0bo.onrender.com               │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  backend/server.js  (Node.js)                        │   │
-│  │  POST /api/sensor-data   ←  receives moisture        │   │
-│  │  GET  /api/status        →  returns irrigationOn     │   │
-│  └───────────────────────┬──────────────────────────────┘   │
-│                          │ HTTP (internal)                   │
-│  ┌───────────────────────▼──────────────────────────────┐   │
-│  │  ml/api/main.py  (FastAPI + XGBoost)                 │   │
-│  │  POST /predict  →  predicted_soil_moisture           │   │
-│  └──────────────────────────────────────────────────────┘   │
-└──────────────────────────┬───────────────────────────────────┘
-                           │ HTTPS
-┌──────────────────────────▼───────────────────────────────────┐
-│  Laptop                                                       │
-│  hardware-gateway/gateway.js  (Node.js)                      │
-│                                                              │
-│  • Uploads sensor data → POST /api/sensor-data               │
-│  • Polls irrigation commands ← GET /api/status               │
-│  • Deduplicates commands (sends only on state change)        │
-│  • Matches ACKs by cmdId                                     │
-└──────────────────────────┬───────────────────────────────────┘
-                           │ USB Serial 115200 baud
-┌──────────────────────────▼───────────────────────────────────┐
-│  ESP32  (D0:EF:76:47:22:24)                                  │
-│  firmware/esp32_gateway/esp32_gateway.ino                    │
-│                                                              │
-│  • Serial → "COMMAND,3,ON,42" → ESP-NOW PKT_COMMAND         │
-│  • ESP-NOW PKT_SENSOR_DATA → Serial "SENSOR,3,32.50"        │
-│  • ESP-NOW PKT_ACK         → Serial "ACK,3,ON,42"           │
-└──────────────────────────┬───────────────────────────────────┘
-                           │ ESP-NOW (2.4 GHz)
-┌──────────────────────────▼───────────────────────────────────┐
-│  Master 2 / ESP8266  (EC:64:C9:CE:01:3E)                    │
-│  firmware/master2/master2.ino                                │
-│                                                              │
-│  Pure router — no relay, no ML, no internet                  │
-│  • SENSOR_DATA from Node 3/4  →  forward to ESP32           │
-│  • COMMAND from ESP32          →  route to Node 3 or 4      │
-│  • ACK from Node 3/4          →  forward to ESP32           │
-└──────────┬───────────────────────────────┬───────────────────┘
-           │ ESP-NOW                       │ ESP-NOW
-┌──────────▼──────────┐         ┌──────────▼──────────┐
-│  Node 3 (ESP8266)  │         │  Node 4 (ESP8266)  │
-│  firmware/node3/   │         │  firmware/node4/   │
-│                    │         │                    │
-│  • Read moisture   │         │  • Read moisture   │
-│  • Send to Master  │         │  • Send to Master  │
-│  • Recv COMMAND    │         │  • Recv COMMAND    │
-│  • Actuate relay   │         │  • Actuate relay   │
-│  • Send ACK        │         │  • Send ACK        │
-└────────────────────┘         └────────────────────┘
+```text
+Sensor Node 1 (ESP8266) --HTTP over master's local Wi-Fi--┐
+                                                         v
+                                                Master 1 (ESP8266)
+                                                /               \
+                               local AP: 192.168.4.1             internet Wi-Fi
+                                                                |
+                                                                v
+                                              POST /api/sensor-data (HTTPS)
+                                                                |
+                                                                v
+                                                  CropConnect backend + ML
+                                                                |
+                                                                v
+                                                     Website: nodes 1 and 2
 ```
 
----
+- Master 1 creates the local access point `CropConnect-Master` with password `CropConnect-NodeLink-26`.
+- Both sensor nodes join that access point and submit their moisture readings to `http://192.168.4.1/sensor`.
+- Master 1 separately joins the internet-connected Wi-Fi network or phone hotspot and uploads validated readings to the cloud.
+- Nodes do not need to know the master's internet-side IP address. Their local destination remains `192.168.4.1`.
+- This design uses Wi-Fi HTTP, not ESP-NOW. It does not require an ESP32 board or a laptop serial gateway while running.
 
-## 2. Known MAC Addresses
+## 2. Firmware files
 
-| Device | MAC | Status |
-|--------|-----|--------|
-| ESP32 | `D0:EF:76:47:22:24` | Confirmed |
-| Master 2 | `EC:64:C9:CE:01:3E` | Confirmed |
-| Node 3 | TBD | Flash node3.ino to read from Serial Monitor |
-| Node 4 | TBD | Flash node4.ino to read from Serial Monitor |
+| Physical board | Arduino sketch |
+|---|---|
+| Master ESP8266 | `firmware/master1/master1.ino` |
+| Sensor Node 1 ESP8266 | `firmware/node1/node1.ino` |
+| Sensor Node 2 ESP8266 | `firmware/node2/node2.ino` |
 
----
+The old sketches in `firmware/master2`, `firmware/node3`, `firmware/node4`, and `firmware/esp32_gateway` are retired and deliberately fail to compile with a clear warning. Do not use them for the current setup.
 
-## 3. Serial Protocol (Laptop ↔ ESP32)
+## 3. Arduino IDE setup
 
-```
-Direction       Format                              Example
-──────────────  ──────────────────────────────────  ─────────────────
-ESP32→Laptop    SENSOR,<node>,<moisture>\n          SENSOR,3,32.50
-ESP32→Laptop    ACK,<node>,<ON|OFF>,<cmdId>\n       ACK,3,ON,42
-ESP32→Laptop    LOG,<message>\n                     LOG,Master2 ready
-Laptop→ESP32    COMMAND,<node>,<ON|OFF>,<cmdId>\n   COMMAND,3,ON,42
-```
+1. Install **ESP8266 by ESP8266 Community** from Boards Manager.
+2. Select **NodeMCU 1.0 (ESP-12E Module)** for each ESP8266 board.
+3. Select the COM port that appears for the connected board.
+4. Set Serial Monitor to **115200 baud**.
+5. Close Serial Monitor before uploading firmware to that board.
 
-- All fields comma-separated, line terminated with `\n`
-- `<node>`: 3 or 4
-- `<moisture>`: float, 0.00–100.00
-- `<state>`: `ON` or `OFF`
-- `<cmdId>`: integer 0–255, wraps around
+### Master 1
 
----
+1. Open `firmware/master1/master1.ino`.
+2. Replace `YOUR_WIFI_NAME` and `YOUR_WIFI_PASSWORD` with the internet Wi-Fi or phone-hotspot credentials.
+3. Upload to the master.
+4. Serial Monitor should show the local AP address `192.168.4.1`, then the internet-side IP when it connects. It also prints cloud upload success/failure.
 
-## 4. ESP-NOW Packet Structure
+The master runs in AP+station mode. Its local access point remains available to the sensor nodes while it uses the internet connection to reach Render.
 
-```c
-typedef struct __attribute__((packed)) {
-  uint8_t packetType;  // 0=SENSOR_DATA, 1=COMMAND, 2=ACK
-  uint8_t nodeId;      // 3 or 4
-  uint8_t commandId;   // 0–255 sequence number
-  uint8_t pumpState;   // 0=OFF, 1=ON
-  float   moisture;    // 0.0–100.0 %
-} espnow_packet_t;     // 8 bytes total
-```
+### Sensor Node 1 and Sensor Node 2
 
-| Field | SENSOR_DATA | COMMAND | ACK |
-|-------|------------|---------|-----|
-| `packetType` | 0 | 1 | 2 |
-| `nodeId` | 3 or 4 | 3 or 4 | 3 or 4 |
-| `commandId` | 0 | seq | same seq echoed |
-| `pumpState` | 0 | 0=OFF / 1=ON | echoed |
-| `moisture` | actual % | 0.0 | 0.0 |
+1. Open `firmware/node1/node1.ino` and upload it to Node 1.
+2. Open `firmware/node2/node2.ino` and upload it to Node 2.
+3. Both nodes use the master's local SSID and password, which already match the master sketch. Do not put your home Wi-Fi or hotspot password into the node sketches.
+4. Each node sends a reading immediately after connecting and then approximately every 30 seconds.
 
----
+## 4. Sensor wiring and calibration
 
-## 5. Complete Data Flow
+- Connect the soil sensor's analog output to `A0`, with sensor power and ground connected according to its datasheet.
+- Check the maximum input voltage of your exact ESP8266 board. Some NodeMCU boards include an A0 divider; bare ESP8266 modules have a lower ADC input limit. Never assume all boards have the same limit.
+- The default code maps ADC 0 to 100% moisture and ADC 1023 to 0%. This is only a starting estimate. Calibrate with your particular sensor in dry and wet soil; resistive and capacitive sensors may have different ranges or polarity.
+- Disconnect power before changing wiring.
 
-### Upward (sensor → cloud)
+## 5. Data protocol
 
-```
-Node 3/4 reads moisture every 30s
-   ↓  ESP-NOW PKT_SENSOR_DATA
-Master 2 receives → forwards unchanged
-   ↓  ESP-NOW PKT_SENSOR_DATA
-ESP32 receives → prints "SENSOR,3,32.50\n" to USB Serial
-   ↓  USB Serial 115200
-Laptop gateway reads line → validates
-   ↓  HTTPS POST /api/sensor-data { master:2, node:3, moisture:32.5 }
-Cloud backend stores reading → runs ML → computes irrigationOn
+### Sensor node → master
+
+HTTP POST to `http://192.168.4.1/sensor` with form fields:
+
+```text
+node=1&moisture=32.50
 ```
 
-### Downward (cloud decision → relay)
+Node 2 sends `node=2`. The master validates the node ID and moisture range (0–100), queues the latest reading, and returns HTTP 202.
 
-```
-Laptop gateway polls GET /api/status every 5s
-   ↓  reads nodes[].irrigationOn for nodes 3 and 4
-   
-[Deduplication check — only continues if state changed or retry needed]
+### Master → cloud
 
-Laptop sends "COMMAND,3,ON,42\n" via USB Serial
-   ↓  USB Serial
-ESP32 reads line → builds PKT_COMMAND { nodeId:3, cmdId:42, pumpState:ON }
-   ↓  ESP-NOW PKT_COMMAND
-Master 2 receives → routes to Node 3 MAC
-   ↓  ESP-NOW PKT_COMMAND
-Node 3 receives → validates nodeId=3 → actuates relay
-   ↓  ESP-NOW PKT_ACK { nodeId:3, cmdId:42, pumpState:ON }
-Master 2 receives → forwards to ESP32
-   ↓  ESP-NOW PKT_ACK
-ESP32 receives → prints "ACK,3,ON,42\n" to USB Serial
-   ↓  USB Serial
-Laptop gateway: cmdId matches pendingCmdId → confirmedState='ON' → done
+HTTPS POST to:
+
+```text
+https://cropconnect-backend-p0bo.onrender.com/api/sensor-data
 ```
 
----
+JSON body:
 
-## 6. Cloud JSON
-
-### POST /api/sensor-data
 ```json
-Request:  { "master": 2, "node": 3, "moisture": 32.5 }
-Response: { "success": true, "message": "Node 3 data recorded" }
+{ "master": 1, "node": 1, "moisture": 32.5 }
 ```
 
-### GET /api/status (gateway reads)
-```json
-{
-  "dataMode": "LIVE",
-  "nodes": [
-    {
-      "node": 3, "master": 2,
-      "moisture": 32.5,
-      "irrigationOn": true,
-      "ml": {
-        "available": true,
-        "predictedMoisturePct": 28.4,
-        "model": "XGBoost",
-        "historyMode": "EARLY"
-      }
-    },
-    {
-      "node": 4, "master": 2,
-      "moisture": 55.0,
-      "irrigationOn": false,
-      "ml": { "available": true, "predictedMoisturePct": 57.1 }
-    }
-  ]
-}
-```
+The master sends at most one queued reading per retry interval. If internet access or the backend is temporarily unavailable, the latest reading remains queued and is retried. The queue is in RAM; a power loss clears pending readings.
 
----
+## 6. Verification checklist
 
-## 7. Command Deduplication State Machine
+- [ ] Master reports that `CropConnect-Master` access point started.
+- [ ] Master joins the internet Wi-Fi/hotspot.
+- [ ] Node 1 connects to `CropConnect-Master` and logs its moisture reading.
+- [ ] Node 2 connects to `CropConnect-Master` and logs its moisture reading.
+- [ ] Master logs incoming readings for node 1 and node 2.
+- [ ] Master logs HTTP 2xx after cloud uploads.
+- [ ] The dashboard shows backend nodes 1 and 2 with recent timestamps.
+- [ ] Render's backend environment has `MOCK_MODE=false` for a real-data deployment.
 
-```
-Per-node gateway state:
-  desiredState   — set from cloud on each poll
-  confirmedState — set when valid ACK received
-  pendingCmdId   — cmdId of outstanding command (null = none)
+## 7. Software-only safety
 
-  Every POLL_INTERVAL_MS:
+The current firmware is read-only with respect to physical devices. It contains no pump, motor, valve, relay, command, or actuator control logic. Machine-learning predictions and backend decisions are for display and analysis only. The retired serial gateway is disabled; it must not be used with the previous ESP32 command protocol.
 
-  If request fails OR dataMode=ERROR:
-    → no command issued
+## 8. Troubleshooting
 
-  If pendingCmdId != null:
-    If elapsed < ACK_TIMEOUT_MS:
-      → wait (do nothing)
-    Else if retryCount < MAX_RETRIES:
-      → retry same cmdId, increment retryCount
-    Else:
-      → give up, clear pendingCmdId
-
-  If desired == confirmed AND pendingCmdId == null:
-    → nothing to do
-
-  If desired != confirmed AND pendingCmdId == null:
-    → assign new cmdId
-    → send COMMAND,<node>,<state>,<cmdId>
-    → set pendingCmdId, reset retryCount
-```
-
----
-
-## 8. Failsafe Behaviour Summary
-
-| Failure | Effect |
-|---------|--------|
-| Cloud unavailable | No new command issued; pump stays in last confirmed state |
-| `dataMode: "ERROR"` | No new command issued |
-| Serial disconnected | No command can be sent; gateway retries reconnect every 3s |
-| No ACK (timeout) | Gateway retries up to MAX_RETRIES, then gives up |
-| Invalid SENSOR packet | Discarded; no upload; no crash |
-| Invalid COMMAND on ESP32 | Discarded; LOG message sent to laptop |
-| COMMAND for wrong nodeId on Node | Discarded silently |
-| ESP-NOW send failure | Logged; no ACK → gateway retries on timeout |
-
-**Default pump state on startup: OFF** (no command is sent until first successful cloud poll confirms a state change is needed).
-
----
-
-## 9. GPIO — Pending Confirmation
-
-The following GPIO assignments are **not yet set** in the firmware.
-All relay actuation code is currently commented out (safe — no accidental actuation).
-
-| Parameter | Node 3 | Node 4 |
-|-----------|--------|--------|
-| `RELAY_PIN` | **TBD** | **TBD** |
-| `MOISTURE_PIN` | **TBD** | **TBD** |
-| Relay active level | **TBD** | **TBD** |
-| Sensor interface | **TBD** | **TBD** |
-
-Once provided, uncomment the corresponding sections in `firmware/node3/node3.ino` and `firmware/node4/node4.ino`.
-
----
-
-## 10. Files Created by This Integration
-
-```
-hardware-gateway/
-  gateway.js          Main laptop gateway
-  package.json        Node.js project
-  .env.example        Configuration template
-  README.md           Setup and troubleshooting guide
-
-firmware/
-  shared/
-    espnow_packet.h   Shared 8-byte ESP-NOW packet struct
-  esp32_gateway/
-    esp32_gateway.ino ESP32 serial↔ESP-NOW bridge
-    espnow_packet.h   (copy)
-  master2/
-    master2.ino       Master 2 pure ESP-NOW router
-    espnow_packet.h   (copy)
-  node3/
-    node3.ino         Node 3 sensor + relay firmware (GPIO TBD)
-    espnow_packet.h   (copy)
-  node4/
-    node4.ino         Node 4 sensor + relay firmware (GPIO TBD)
-    espnow_packet.h   (copy)
-
-HARDWARE_INTEGRATION.md  (this file)
-```
-
-**Files NOT modified:**
-- `backend/server.js` — unchanged
-- `backend/.env` — unchanged (set MOCK_MODE=false manually)
-- `frontend/` — unchanged
-- `ml/` — unchanged
-- `data/` — unchanged
+- **Node can't join the master AP:** Verify SSID/password spelling, keep the node within range, restart the master, and confirm the master AP is visible.
+- **Master AP works but cloud upload fails:** Verify its internet Wi-Fi credentials and that the hotspot has internet access. Render's free service may need time to wake.
+- **Master receives readings but dashboard doesn't change:** Check cloud upload HTTP status, backend logs, and that the frontend deployment contains the updated mapping to nodes 1 and 2.
+- **Reading looks inverted or inaccurate:** Calibrate the ADC-to-moisture mapping for the actual sensor and soil.
+- **No COM port:** Reconnect USB, try a known data-capable cable, check Device Manager, and install the correct USB-to-serial driver for the board's chip.
