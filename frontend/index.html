@@ -3,97 +3,110 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#101a16" />
-  <title>CropConnect | Sensor Monitor</title>
-  <meta name="description" content="CropConnect sensor monitoring dashboard showing soil moisture readings and software-based analysis for two sensor nodes." />
+  <meta name="theme-color" content="#f4f5ed" />
+  <title>CropConnect | Soil Intelligence</title>
+  <meta name="description" content="Live soil moisture monitoring and machine-learning insights for the CropConnect sensor network." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="./" aria-label="CropConnect home">
-      <span class="brand-mark">🌱</span>
-      <span><strong>CropConnect</strong><small>Sensor monitoring system</small></span>
+      <span class="brand-mark" aria-hidden="true"><span>✳</span></span>
+      <span class="brand-copy"><strong>cropconnect<span>.</span></strong><small>SOIL INTELLIGENCE PLATFORM</small></span>
     </a>
-    <div class="connection-pill">
-      <span id="connection-dot" class="connection-dot"></span>
-      <span id="connection-text">Connecting to server…</span>
+    <div class="topbar-right">
+      <span class="environment-tag"><span class="environment-dot"></span> LIVE MONITOR</span>
+      <div class="connection-pill"><span id="connection-dot" class="connection-dot"></span><span id="connection-text">Connecting to server…</span></div>
     </div>
   </header>
 
   <main class="container">
-    <section class="intro">
-      <div class="eyebrow"><span class="eyebrow-line"></span> LIVE SENSOR OVERVIEW</div>
-      <h1>Know your soil.<br /><span>Understand the readings.</span></h1>
-      <p>Monitor two soil-moisture sensor nodes and view software-generated analysis. CropConnect displays information only; it does not operate pumps, motors, valves, or other hardware.</p>
-      <div class="intro-meta">
-        <span class="meta-chip"><span class="chip-dot"></span> 1 master</span>
-        <span class="meta-chip"><span class="chip-dot"></span> 2 sensor nodes</span>
-        <span class="meta-chip"><span class="chip-dot"></span> Software-only output</span>
+    <section class="welcome-row">
+      <div class="welcome-copy">
+        <div class="eyebrow"><span class="eyebrow-mark">01</span> FIELD OVERVIEW <span class="eyebrow-rule"></span></div>
+        <h1>Better data.<br /><span>Healthier growth.</span></h1>
+        <p>A clear view of your soil, powered by sensor readings and machine-learning insights.</p>
       </div>
+      <aside class="network-card" aria-label="Sensor network structure">
+        <div class="network-card-top"><span>YOUR NETWORK</span><span class="network-online"><i></i> 3 DEVICES</span></div>
+        <div class="network-flow">
+          <div class="network-device master-device"><span class="device-icon">⌁</span><strong>Master 01</strong><small>Gateway</small></div>
+          <div class="network-branches"><span></span><span></span></div>
+          <div class="network-sensors">
+            <div class="network-device"><span class="sensor-mini">01</span><strong>Sensor 01</strong></div>
+            <div class="network-device"><span class="sensor-mini">02</span><strong>Sensor 02</strong></div>
+          </div>
+        </div>
+        <p class="network-footnote">One master · Two sensor nodes · Read-only monitoring</p>
+      </aside>
     </section>
 
-    <section class="status-strip" aria-live="polite">
-      <div class="status-copy">
-        <span class="status-icon">↻</span>
-        <div><strong id="system-status-title">Waiting for readings</strong><p id="system-status-detail">Connecting to the CropConnect backend.</p></div>
-      </div>
-      <div class="refresh-info"><span class="pulse"></span> Auto-refresh every 10 seconds</div>
+    <section class="overview-bar" aria-live="polite">
+      <div class="overview-icon"><span>↗</span></div>
+      <div class="overview-copy"><strong id="system-status-title">Waiting for readings</strong><p id="system-status-detail">Connecting to the CropConnect backend.</p></div>
+      <div class="overview-divider"></div>
+      <div class="refresh-status"><span class="refresh-ring">↻</span><div><strong>Auto refresh</strong><small>Every 10 seconds</small></div></div>
+      <div class="last-check"><small>LAST CHECK</small><strong id="last-refresh">—</strong></div>
     </section>
 
     <section class="section-heading">
-      <div><span class="section-kicker">SENSOR NETWORK</span><h2>Soil readings</h2></div>
-      <span class="section-caption" id="last-refresh">Last checked: —</span>
+      <div><span class="section-kicker">LIVE TELEMETRY</span><h2>Soil moisture</h2><p>Real-time readings from your two connected sensor nodes.</p></div>
+      <span class="unit-label">MOISTURE <b>%</b></span>
     </section>
 
     <section class="nodes-grid" aria-label="Soil sensor readings">
       <article class="sensor-card" id="sensor-card-1">
         <div class="card-top">
-          <div class="node-icon">01</div>
-          <div class="node-title"><span class="node-label">SENSOR NODE 01</span><h3>Soil Sensor 1</h3><p>Connected through Master 1</p></div>
+          <div class="node-icon node-icon-one"><span>01</span><i>↗</i></div>
+          <div class="node-title"><span class="node-label">SENSOR NODE 01</span><h3>Soil Sensor One</h3><p><span class="tiny-link-dot"></span> Connected through Master 1</p></div>
           <span class="state-badge state-waiting" id="state-badge-1">Waiting</span>
         </div>
         <div class="reading-panel">
-          <div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-1">—</span><small>%</small></div></div>
+          <div class="reading-head"><div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-1">—</span><small>%</small></div></div><div class="gauge" aria-hidden="true"><div class="gauge-inner"><span>LIVE</span><b>DATA</b></div></div></div>
           <div class="reading-caption" id="reading-caption-1">Waiting for sensor data</div>
           <div class="meter"><div class="meter-fill" id="meter-1"></div></div>
-          <div class="meter-labels"><span>0% · Dry</span><span>100% · Wet</span></div>
+          <div class="meter-labels"><span><i class="dry-dot"></i> 0% · Dry</span><span>100% · Wet <i class="wet-dot"></i></span></div>
         </div>
         <div class="analysis-panel">
-          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>SOFTWARE ANALYSIS</span></div>
+          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>MODEL INSIGHT</span><span class="analysis-tag">PREDICTION</span></div>
           <div class="analysis-row"><span>Predicted moisture</span><strong id="prediction-1">Not available</strong></div>
-          <p class="analysis-note" id="analysis-1">The software analysis will appear when a valid sensor reading and ML prediction are available.</p>
+          <p class="analysis-note" id="analysis-1">A model insight will appear when a prediction is available.</p>
         </div>
-        <footer class="card-footer"><span>Last reading</span><span id="updated-1">No data yet</span></footer>
+        <footer class="card-footer"><span><span class="footer-dot"></span> LAST SENSOR UPDATE</span><strong id="updated-1">No data yet</strong></footer>
       </article>
 
       <article class="sensor-card" id="sensor-card-2">
         <div class="card-top">
-          <div class="node-icon">02</div>
-          <div class="node-title"><span class="node-label">SENSOR NODE 02</span><h3>Soil Sensor 2</h3><p>Connected through Master 1</p></div>
+          <div class="node-icon node-icon-two"><span>02</span><i>↗</i></div>
+          <div class="node-title"><span class="node-label">SENSOR NODE 02</span><h3>Soil Sensor Two</h3><p><span class="tiny-link-dot"></span> Connected through Master 1</p></div>
           <span class="state-badge state-waiting" id="state-badge-2">Waiting</span>
         </div>
         <div class="reading-panel">
-          <div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-2">—</span><small>%</small></div></div>
+          <div class="reading-head"><div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-2">—</span><small>%</small></div></div><div class="gauge" aria-hidden="true"><div class="gauge-inner"><span>LIVE</span><b>DATA</b></div></div></div>
           <div class="reading-caption" id="reading-caption-2">Waiting for sensor data</div>
           <div class="meter"><div class="meter-fill" id="meter-2"></div></div>
-          <div class="meter-labels"><span>0% · Dry</span><span>100% · Wet</span></div>
+          <div class="meter-labels"><span><i class="dry-dot"></i> 0% · Dry</span><span>100% · Wet <i class="wet-dot"></i></span></div>
         </div>
         <div class="analysis-panel">
-          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>SOFTWARE ANALYSIS</span></div>
+          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>MODEL INSIGHT</span><span class="analysis-tag">PREDICTION</span></div>
           <div class="analysis-row"><span>Predicted moisture</span><strong id="prediction-2">Not available</strong></div>
-          <p class="analysis-note" id="analysis-2">The software analysis will appear when a valid sensor reading and ML prediction are available.</p>
+          <p class="analysis-note" id="analysis-2">A model insight will appear when a prediction is available.</p>
         </div>
-        <footer class="card-footer"><span>Last reading</span><span id="updated-2">No data yet</span></footer>
+        <footer class="card-footer"><span><span class="footer-dot"></span> LAST SENSOR UPDATE</span><strong id="updated-2">No data yet</strong></footer>
       </article>
     </section>
 
-    <section class="explanation">
-      <div class="explanation-icon">ⓘ</div>
-      <div><strong>How to read this dashboard</strong><p>Current moisture is the latest sensor reading. Predicted moisture is the value returned by the machine-learning service. The software note compares these values for information only; it does not trigger or control any physical device.</p></div>
+    <section class="insight-footer">
+      <div class="insight-icon">i</div>
+      <div><strong>Insights, not actions.</strong><p>Current moisture comes from the sensor. Predicted moisture comes from the machine-learning service. These values are informational only — CropConnect does not control pumps, motors, valves, or any physical hardware.</p></div>
+      <div class="insight-stamp"><span>✳</span> SOFTWARE ONLY</div>
     </section>
 
-    <footer class="page-footer"><span>🌱 CropConnect</span><span>Sensor readings · Software analysis · No actuator controls</span></footer>
+    <footer class="page-footer"><a class="footer-brand" href="./"><span>✳</span> cropconnect<span>.</span></a><span>Built for smarter soil monitoring <i>·</i> No actuator controls</span></footer>
   </main>
   <script src="app.js"></script>
 </body>
