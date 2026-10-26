@@ -1,22 +1,14 @@
 {
-  "name": "cropconnect-hardware-gateway",
+  "name": "cropconnect-hardware-gateway-retired",
   "version": "1.0.0",
-  "description": "Laptop USB-Serial gateway between ESP32 hardware and CropConnect cloud backend",
+  "private": true,
+  "description": "Retired legacy ESP32 serial gateway. Do not run for the current software-only three-ESP8266 architecture.",
   "main": "gateway.js",
   "scripts": {
     "start": "node gateway.js",
     "test-mode": "node gateway.js --test"
   },
-  "dependencies": {
-    "@serialport/parser-readline": "^12.0.0",
-    "dotenv": "^16.4.5",
-    "node-fetch": "^2.7.0",
-    "serialport": "^12.0.0"
-  },
   "engines": {
     "node": ">=16.0.0"
-  },
-  "allowScripts": {
-    "@serialport/bindings-cpp@12.0.1": true
   }
 }
