@@ -3,11 +3,10 @@
 const BACKEND_URL = "https://cropconnect-backend-p0bo.onrender.com";
 const REFRESH_INTERVAL_MS = 10000;
 
-// The backend currently identifies the two retained physical nodes as 3 and 4.
-// The website presents them simply as Sensor Node 01 and Sensor Node 02.
+// Canonical physical setup: Master 1 forwards Sensor Nodes 1 and 2.
 const DISPLAY_NODES = [
-  { display: 1, backendId: 3 },
-  { display: 2, backendId: 4 },
+  { display: 1, backendId: 1 },
+  { display: 2, backendId: 2 },
 ];
 
 const byId = (id) => document.getElementById(id);
