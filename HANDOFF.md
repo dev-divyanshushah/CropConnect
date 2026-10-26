@@ -1,37 +1,46 @@
-# CropConnect ML Integration - Handoff Summary
+# CropConnect — Current Handoff
 
-**Date:** August 15, 2026
+## Current physical scope
 
-## 1. What Has Been Accomplished
-We have successfully integrated a standalone ML microservice into the existing CropConnect Node.js ecosystem. 
-*   **ML Pipeline:** We built a causal preprocessing pipeline and trained an XGBoost model (`V2`) exclusively on features that the real hardware can supply (`clay`, `sand`, `silt`, `month`, `day_of_year`, and `lags`/`rolling means`).
-*   **FastAPI Service:** Created a standalone Python FastAPI service (`ml/api/main.py`) that loads the V2 model and serves predictions safely.
-*   **Backend Integration:** Updated `backend/server.js` to call the FastAPI service asynchronously. The Node.js server maps the frontend `soilType` to physical percentages (clay/sand/silt).
-*   **Fault Tolerance:** The Node.js server gracefully falls back to its original rule-based logic (e.g., `moisture < 65`) if the ML API goes down or if required features are missing. The system never crashes due to ML unavailability.
+The active build uses **one Master ESP8266 and two Sensor ESP8266 boards**. The frontend displays sensor readings and ML/software analysis only. No hardware actuation is implemented.
 
-## 2. Where We Left Off (Current Status)
-*   The V2 ML model requires historical 7-day soil moisture trends (`lag1`, `lag3`, `lag7`, `roll7`).
-*   The backend currently **does not** collect or store these 7-day trends in active memory.
-*   Because we refused to use fake placeholder values in production, the Node.js `fetchMLPrediction` function currently short-circuits and safely returns: `"Missing required historical ML features. ML disabled until history cache is implemented."`
-*   As a result, the ML API is fully functional, but the backend is gracefully skipping it until the history cache is built.
+## Canonical data path
 
-## 3. Next Steps (To Resume Work)
-The immediate next step is to implement the **Historical Feature Cache** in the Node.js backend.
+1. Sensor Node 1 and Sensor Node 2 read analog soil moisture from A0.
+2. Each node connects to the local access point created by Master 1 (`CropConnect-Master`, local IP `192.168.4.1`).
+3. Each node POSTs `node` and `moisture` to `http://192.168.4.1/sensor`.
+4. Master 1 joins the internet Wi-Fi/hotspot separately and POSTs `{ master: 1, node: 1|2, moisture: number }` to the Render backend's `/api/sensor-data`.
+5. The backend validates data and runs the existing software/ML pipeline.
+6. The Vercel dashboard polls `/api/status` and renders nodes 1 and 2.
 
-1.  **Modify `backend/server.js`:** Create an in-memory queue/array attached to each `sensorData[nodeId]` that records the daily average moisture for the last 7 days.
-2.  **Snapshot Persistence:** Ensure this 7-day array is saved and loaded from `data/irrigation_data.json` so it survives server restarts.
-3.  **Activate ML Call:** Once the history is successfully collected, update `fetchMLPrediction` in `server.js` to pass those real lags (`nodeData.history.lag1`, etc.) into the FastAPI payload.
-4.  **Frontend Toggle:** Add an "Enable AI Smart Irrigation" toggle to the frontend UI so users can choose between rule-based or ML-based irrigation.
+## Canonical files
 
-## 4. How to Run the Project Locally
-To resume testing:
-1.  **Start ML API:** 
-    ```bash
-    cd ml
-    python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
-    ```
-2.  **Start Node Backend:**
-    ```bash
-    cd backend
-    npm run dev
-    ```
+- Master firmware: `firmware/master1/master1.ino`
+- Node 1 firmware: `firmware/node1/node1.ino`
+- Node 2 firmware: `firmware/node2/node2.ino`
+- Hardware setup: `firmware/README.md` and `HARDWARE_INTEGRATION.md`
+- Frontend: `frontend/index.html`, `frontend/style.css`, `frontend/app.js`
+- Backend ingestion route: `backend/server.js`, `POST /api/sensor-data`
+- Cloud API: `https://cropconnect-backend-p0bo.onrender.com`
+- Dashboard: `https://crop-connect-five.vercel.app/`
+
+## Important setup
+
+- Set `WIFI_SSID` and `WIFI_PASSWORD` in Master 1's sketch before uploading.
+- The sensor nodes do not use those internet Wi-Fi credentials; they connect to the master's AP using the credentials embedded in all three sketches.
+- The current code assumes analog moisture readings where lower ADC values mean wetter soil. Calibrate this for the actual sensors before relying on percentage values.
+- Set Render's `MOCK_MODE=false` for a production run with real sensor data.
+- Local IPs printed by the earlier temporary Wi-Fi test sketches are not used by the new design.
+- The old `master2`, `node3`, `node4`, and `esp32_gateway` sketches are retired and intentionally fail to compile. The old hardware gateway is disabled.
+
+## Safety boundary
+
+No commands are sent from the backend to firmware. No pump, motor, valve, relay, or actuator is switched. Backend decision fields are informational software outputs only.
+
+## Suggested bring-up order
+
+1. Flash Master 1 and verify AP startup and internet connection in Serial Monitor (115200 baud).
+2. Flash Node 1 and verify it joins the master's AP and sends readings.
+3. Flash Node 2 and verify it joins the master's AP and sends readings.
+4. Verify Master 1 reports HTTP 2xx from the cloud API.
+5. Open the dashboard and confirm the values and timestamps update.
