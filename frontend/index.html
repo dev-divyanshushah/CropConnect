@@ -1,408 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CropConnect – Smart Irrigation Dashboard</title>
-  <meta name="description"
-    content="Smart Irrigation System Dashboard – Monitor soil moisture, irrigation status, and weather for 4 field sectors." />
+  <meta name="theme-color" content="#101a16" />
+  <title>CropConnect | Sensor Monitor</title>
+  <meta name="description" content="CropConnect sensor monitoring dashboard showing soil moisture readings and software-based analysis for two sensor nodes." />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌾</text></svg>" />
-  <!-- Chart.js for Analytics -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
 </head>
-
 <body>
-
-  <!-- ══════════════════════════════════════════════════════ -->
-  <!-- HEADER                                                  -->
-  <!-- ══════════════════════════════════════════════════════ -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo-icon">🌾</div>
-      <div class="header-title">
-        <h1>CropConnect</h1>
-        <p>Smart Irrigation Dashboard</p>
-      </div>
-    </div>
-    <div class="header-right">
-      <!-- Live connection indicator -->
-      <div class="connection-status">
-        <div id="connection-dot" class="connection-dot"></div>
-        <span id="connection-text">Connecting…</span>
-      </div>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="CropConnect home">
+      <span class="brand-mark">🌱</span>
+      <span><strong>CropConnect</strong><small>Sensor monitoring system</small></span>
+    </a>
+    <div class="connection-pill">
+      <span id="connection-dot" class="connection-dot"></span>
+      <span id="connection-text">Connecting to server…</span>
     </div>
   </header>
 
-  <!-- Data Mode Banner: shown when data is LAST_KNOWN, OFFLINE, or ERROR -->
-  <div id="data-mode-banner" class="data-mode-banner" role="alert" aria-live="polite">
-    <div class="data-mode-dot"></div>
-    <span id="data-mode-text">Loading…</span>
-  </div>
-
-  <!-- ══════════════════════════════════════════════════════ -->
-  <!-- MAIN CONTENT                                            -->
-  <!-- ══════════════════════════════════════════════════════ -->
-  <main class="main">
-
-    <!-- ── Weather Strip ──────────────────────────────────── -->
-    <div id="weather-strip" class="weather-strip">
-      <div class="weather-left">
-        <div id="weather-icon" class="weather-icon">⏳</div>
-        <div>
-          <div id="weather-message" class="weather-message">Loading weather…</div>
-          <div id="weather-sub" class="weather-sub">Checking forecast</div>
-          <div id="weather-location-label" class="weather-location-label">Loading location…</div>
-        </div>
+  <main class="container">
+    <section class="intro">
+      <div class="eyebrow"><span class="eyebrow-line"></span> LIVE SENSOR OVERVIEW</div>
+      <h1>Know your soil.<br /><span>Understand the readings.</span></h1>
+      <p>Monitor two soil-moisture sensor nodes and view software-generated analysis. CropConnect displays information only; it does not operate pumps, motors, valves, or other hardware.</p>
+      <div class="intro-meta">
+        <span class="meta-chip"><span class="chip-dot"></span> 1 master</span>
+        <span class="meta-chip"><span class="chip-dot"></span> 2 sensor nodes</span>
+        <span class="meta-chip"><span class="chip-dot"></span> Software-only output</span>
       </div>
-      <div class="weather-right">
-        <div class="weather-stat">
-          <div id="weather-temp" class="weather-stat-value">—</div>
-          <div class="weather-stat-label">Temperature</div>
-        </div>
-        <div class="weather-stat">
-          <div id="weather-desc" class="weather-stat-value" style="font-size:0.88rem;">—</div>
-          <div class="weather-stat-label">Condition</div>
-        </div>
+    </section>
+
+    <section class="status-strip" aria-live="polite">
+      <div class="status-copy">
+        <span class="status-icon">↻</span>
+        <div><strong id="system-status-title">Waiting for readings</strong><p id="system-status-detail">Connecting to the CropConnect backend.</p></div>
       </div>
-    </div>
+      <div class="refresh-info"><span class="pulse"></span> Auto-refresh every 10 seconds</div>
+    </section>
 
-    <!-- ── Legend + Global Controls ─────────────────────── -->
-    <div class="legend">
-      <span class="legend-title">Guide:</span>
-      <div class="legend-item">
-        <div class="legend-dot green"></div>
-        <span>Soil moisture is <strong>OK</strong></span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot red"></div>
-        <span>Soil is <strong>DRY</strong> – needs water</span>
-      </div>
-      <div class="legend-item">
-        <div class="legend-dot blue"></div>
-        <span><strong>Irrigation ON</strong> – water flowing</span>
-      </div>
-      <div style="margin-left:auto; font-size:0.78rem; color:var(--text-muted);">
-        Threshold: <strong id="threshold-display">—</strong> moisture level
-      </div>
-    </div>
+    <section class="section-heading">
+      <div><span class="section-kicker">SENSOR NETWORK</span><h2>Soil readings</h2></div>
+      <span class="section-caption" id="last-refresh">Last checked: —</span>
+    </section>
 
-    <!-- ── Global ALL ON / ALL OFF Controls ──────────────── -->
-    <div class="global-controls">
-      <span class="global-controls-label">All Valves:</span>
-      <button class="global-btn global-btn-on" id="btn-all-on" onclick="toggleAll('ON')">
-        💧 ALL ON
-      </button>
-      <button class="global-btn global-btn-off" id="btn-all-off" onclick="toggleAll('OFF')">
-        ⛔ ALL OFF
-      </button>
-      <button class="global-btn global-btn-auto" id="btn-all-auto" onclick="toggleAll('AUTO')">
-        🤖 ALL AUTO
-      </button>
-    </div>
-
-    <!-- ── Section: Sensor Nodes ──────────────────────────── -->
-    <div class="section-title">📡 Field Sectors – Soil Moisture</div>
-
-    <div class="nodes-grid">
-
-      <!-- MASTER 1 -->
-      <div id="master-card-1" class="master-card">
-        <div class="master-header">
-          <div class="master-title">📡 Master 1 <span>(Nodes 1 & 2)</span></div>
+    <section class="nodes-grid" aria-label="Soil sensor readings">
+      <article class="sensor-card" id="sensor-card-1">
+        <div class="card-top">
+          <div class="node-icon">01</div>
+          <div class="node-title"><span class="node-label">SENSOR NODE 01</span><h3>Soil Sensor 1</h3><p>Connected through Master 1</p></div>
+          <span class="state-badge state-waiting" id="state-badge-1">Waiting</span>
         </div>
-        <div class="master-nodes">
-          <!-- Node 1 -->
-          <div id="node-card-1" class="node-card state-nodata">
-            <div class="node-header">
-              <div>
-                <div class="node-name">🌱 Sector 1</div>
-                <div class="node-master">Node 1</div>
-              </div>
-              <div class="node-status-badge badge-nodata">⬜ No Data</div>
-            </div>
-            <div class="moisture-section">
-              <div class="moisture-row">
-                <div>
-                  <div class="moisture-label">Soil Moisture</div>
-                  <div>
-                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                    <span class="moisture-unit"> %</span>
-                  </div>
-                </div>
-              </div>
-              <div class="moisture-bar-track">
-                <div class="moisture-bar-fill" style="width:0%"></div>
-              </div>
-            </div>
-            <div class="ml-status"></div>
-            <div class="last-updated">No data received yet</div>
-          </div>
-
-          <!-- Node 2 -->
-          <div id="node-card-2" class="node-card state-nodata">
-            <div class="node-header">
-              <div>
-                <div class="node-name">🌱 Sector 2</div>
-                <div class="node-master">Node 2</div>
-              </div>
-              <div class="node-status-badge badge-nodata">⬜ No Data</div>
-            </div>
-            <div class="moisture-section">
-              <div class="moisture-row">
-                <div>
-                  <div class="moisture-label">Soil Moisture</div>
-                  <div>
-                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                    <span class="moisture-unit"> %</span>
-                  </div>
-                </div>
-              </div>
-              <div class="moisture-bar-track">
-                <div class="moisture-bar-fill" style="width:0%"></div>
-              </div>
-            </div>
-            <div class="ml-status"></div>
-            <div class="last-updated">No data received yet</div>
-          </div>
+        <div class="reading-panel">
+          <div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-1">—</span><small>%</small></div></div>
+          <div class="reading-caption" id="reading-caption-1">Waiting for sensor data</div>
+          <div class="meter"><div class="meter-fill" id="meter-1"></div></div>
+          <div class="meter-labels"><span>0% · Dry</span><span>100% · Wet</span></div>
         </div>
-        <div class="irrigation-row master-irrigation" id="master-irr-row-1">
-          <div class="irrigation-label">
-            <span class="irrigation-icon">💧</span>
-            Master 1 Valves
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setMasterAuto(1)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="master-valve-btn-1" onclick="toggleMaster(1)">OFF</button>
-          </div>
+        <div class="analysis-panel">
+          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>SOFTWARE ANALYSIS</span></div>
+          <div class="analysis-row"><span>Predicted moisture</span><strong id="prediction-1">Not available</strong></div>
+          <p class="analysis-note" id="analysis-1">The software analysis will appear when a valid sensor reading and ML prediction are available.</p>
         </div>
-      </div>
+        <footer class="card-footer"><span>Last reading</span><span id="updated-1">No data yet</span></footer>
+      </article>
 
-      <!-- MASTER 2 -->
-      <div id="master-card-2" class="master-card">
-        <div class="master-header">
-          <div class="master-title">📡 Master 2 <span>(Nodes 3 & 4)</span></div>
+      <article class="sensor-card" id="sensor-card-2">
+        <div class="card-top">
+          <div class="node-icon">02</div>
+          <div class="node-title"><span class="node-label">SENSOR NODE 02</span><h3>Soil Sensor 2</h3><p>Connected through Master 1</p></div>
+          <span class="state-badge state-waiting" id="state-badge-2">Waiting</span>
         </div>
-        <div class="master-nodes">
-          <!-- Node 3 -->
-          <div id="node-card-3" class="node-card state-nodata">
-            <div class="node-header">
-              <div>
-                <div class="node-name">🌱 Sector 3</div>
-                <div class="node-master">Node 3</div>
-              </div>
-              <div class="node-status-badge badge-nodata">⬜ No Data</div>
-            </div>
-            <div class="moisture-section">
-              <div class="moisture-row">
-                <div>
-                  <div class="moisture-label">Soil Moisture</div>
-                  <div>
-                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                    <span class="moisture-unit"> %</span>
-                  </div>
-                </div>
-              </div>
-              <div class="moisture-bar-track">
-                <div class="moisture-bar-fill" style="width:0%"></div>
-              </div>
-            </div>
-            <div class="ml-status"></div>
-            <div class="last-updated">No data received yet</div>
-          </div>
-
-          <!-- Node 4 -->
-          <div id="node-card-4" class="node-card state-nodata">
-            <div class="node-header">
-              <div>
-                <div class="node-name">🌱 Sector 4</div>
-                <div class="node-master">Node 4</div>
-              </div>
-              <div class="node-status-badge badge-nodata">⬜ No Data</div>
-            </div>
-            <div class="moisture-section">
-              <div class="moisture-row">
-                <div>
-                  <div class="moisture-label">Soil Moisture</div>
-                  <div>
-                    <span class="moisture-value" style="color:var(--text-muted)">—</span>
-                    <span class="moisture-unit"> %</span>
-                  </div>
-                </div>
-              </div>
-              <div class="moisture-bar-track">
-                <div class="moisture-bar-fill" style="width:0%"></div>
-              </div>
-            </div>
-            <div class="ml-status"></div>
-            <div class="last-updated">No data received yet</div>
-          </div>
+        <div class="reading-panel">
+          <div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-2">—</span><small>%</small></div></div>
+          <div class="reading-caption" id="reading-caption-2">Waiting for sensor data</div>
+          <div class="meter"><div class="meter-fill" id="meter-2"></div></div>
+          <div class="meter-labels"><span>0% · Dry</span><span>100% · Wet</span></div>
         </div>
-        <div class="irrigation-row master-irrigation" id="master-irr-row-2">
-          <div class="irrigation-label">
-            <span class="irrigation-icon">💧</span>
-            Master 2 Valves
-          </div>
-          <div style="display:flex; gap:6px;">
-            <button class="irrigation-value irr-auto-btn" onclick="setMasterAuto(2)" title="Return to automatic mode">AUTO</button>
-            <button class="irrigation-value irr-off" id="master-valve-btn-2" onclick="toggleMaster(2)">OFF</button>
-          </div>
+        <div class="analysis-panel">
+          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>SOFTWARE ANALYSIS</span></div>
+          <div class="analysis-row"><span>Predicted moisture</span><strong id="prediction-2">Not available</strong></div>
+          <p class="analysis-note" id="analysis-2">The software analysis will appear when a valid sensor reading and ML prediction are available.</p>
         </div>
-      </div>
+        <footer class="card-footer"><span>Last reading</span><span id="updated-2">No data yet</span></footer>
+      </article>
+    </section>
 
-    </div><!-- /nodes-grid -->
+    <section class="explanation">
+      <div class="explanation-icon">ⓘ</div>
+      <div><strong>How to read this dashboard</strong><p>Current moisture is the latest sensor reading. Predicted moisture is the value returned by the machine-learning service. The software note compares these values for information only; it does not trigger or control any physical device.</p></div>
+    </section>
 
-    <!-- ── Sensor Analytics Section ────────────────────────────── -->
-    <div class="analytics-panel">
-      <div class="analytics-header">
-        <div class="analytics-title">📊 Sensor Analytics</div>
-        <div class="analytics-controls">
-          <select id="analytics-node-select" onchange="fetchHistory()">
-            <option value="1-1">Sector 1 (Node 1 - Master 1)</option>
-            <option value="1-2">Sector 2 (Node 2 - Master 1)</option>
-            <option value="2-3">Sector 3 (Node 3 - Master 2)</option>
-            <option value="2-4">Sector 4 (Node 4 - Master 2)</option>
-          </select>
-          <select id="analytics-range-select" onchange="fetchHistory()">
-            <option value="24h">Last 24 Hours</option>
-            <option value="7d">Last 7 Days</option>
-            <option value="30d">Last 30 Days</option>
-          </select>
-        </div>
-      </div>
-      <div id="analytics-empty-state" class="analytics-empty-state">Loading sensor history...</div>
-      <div id="analytics-charts-container" class="analytics-charts-container" style="display: none;">
-        <div class="chart-wrapper">
-          <canvas id="chart-moisture"></canvas>
-        </div>
-        <div class="chart-wrapper">
-          <canvas id="chart-ml"></canvas>
-        </div>
-        <div class="chart-wrapper">
-          <canvas id="chart-irrigation"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Farm Settings Panel ────────────────────────────── -->
-    <div class="settings-panel">
-      <div class="settings-header" onclick="toggleSettings()" id="settings-header" role="button" aria-expanded="false">
-        <div class="settings-title">
-          ⚙️ Farm Settings
-        </div>
-        <span id="settings-toggle-icon" class="settings-toggle-icon">▼</span>
-      </div>
-
-      <div id="settings-body" class="settings-body">
-        <div class="settings-grid">
-
-          <div class="settings-field">
-            <label for="setting-cropType">Crop Type</label>
-            <select id="setting-cropType">
-              <option value="Wheat">Wheat</option>
-              <option value="Rice">Rice</option>
-              <option value="Maize">Maize / Corn</option>
-              <option value="Sugarcane">Sugarcane</option>
-              <option value="Cotton">Cotton</option>
-              <option value="Soybean">Soybean</option>
-              <option value="Potato">Potato</option>
-              <option value="Tomato">Tomato</option>
-              <option value="Onion">Onion</option>
-              <option value="Other">Other</option>
-            </select>
-          </div>
-
-          <div class="settings-field">
-            <label for="setting-soilType">Soil Type</label>
-            <select id="setting-soilType">
-              <option value="Loamy">Loamy</option>
-              <option value="Sandy">Sandy</option>
-              <option value="Clay">Clay</option>
-              <option value="Silty">Silty</option>
-              <option value="Peaty">Peaty</option>
-              <option value="Chalky">Chalky</option>
-            </select>
-          </div>
-
-          <div class="settings-field">
-            <label for="setting-growthStage">Growth Stage</label>
-            <select id="setting-growthStage">
-              <option value="Germination">Germination</option>
-              <option value="Seedling">Seedling</option>
-              <option value="Vegetative">Vegetative</option>
-              <option value="Flowering">Flowering</option>
-              <option value="Fruiting">Fruiting / Grain Fill</option>
-              <option value="Maturity">Maturity / Harvest</option>
-            </select>
-          </div>
-
-          <!-- State dropdown – All 29 States of India (appears BEFORE City) -->
-          <div class="settings-field">
-            <label for="setting-state">State</label>
-            <select id="setting-state">
-              <option value="">-- Select State --</option>
-              <option value="Andhra Pradesh">Andhra Pradesh</option>
-              <option value="Arunachal Pradesh">Arunachal Pradesh</option>
-              <option value="Assam">Assam</option>
-              <option value="Bihar">Bihar</option>
-              <option value="Chhattisgarh">Chhattisgarh</option>
-              <option value="Goa">Goa</option>
-              <option value="Gujarat">Gujarat</option>
-              <option value="Haryana">Haryana</option>
-              <option value="Himachal Pradesh">Himachal Pradesh</option>
-              <option value="Jharkhand">Jharkhand</option>
-              <option value="Karnataka">Karnataka</option>
-              <option value="Kerala">Kerala</option>
-              <option value="Madhya Pradesh">Madhya Pradesh</option>
-              <option value="Maharashtra">Maharashtra</option>
-              <option value="Manipur">Manipur</option>
-              <option value="Meghalaya">Meghalaya</option>
-              <option value="Mizoram">Mizoram</option>
-              <option value="Nagaland">Nagaland</option>
-              <option value="Odisha">Odisha</option>
-              <option value="Punjab">Punjab</option>
-              <option value="Rajasthan">Rajasthan</option>
-              <option value="Sikkim">Sikkim</option>
-              <option value="Tamil Nadu">Tamil Nadu</option>
-              <option value="Telangana">Telangana</option>
-              <option value="Tripura">Tripura</option>
-              <option value="Uttar Pradesh">Uttar Pradesh</option>
-              <option value="Uttarakhand">Uttarakhand</option>
-              <option value="West Bengal">West Bengal</option>
-              <option value="Delhi">Delhi</option>
-            </select>
-          </div>
-
-          <!-- City dropdown – populated dynamically based on selected State -->
-          <div class="settings-field">
-            <label for="setting-city">City</label>
-            <select id="setting-city">
-              <option value="">-- Select State first --</option>
-            </select>
-          </div>
-
-        </div>
-
-        <button class="settings-save-btn" onclick="saveSettings()" id="save-settings-btn">
-          💾 Save Settings
-        </button>
-        <span id="settings-save-msg" class="settings-save-msg">✅ Saved!</span>
-      </div>
-    </div>
-
+    <footer class="page-footer"><span>🌱 CropConnect</span><span>Sensor readings · Software analysis · No actuator controls</span></footer>
   </main>
-
-  <!-- ══════════════════════════════════════════════════════ -->
-  <!-- FOOTER                                                  -->
-  <!-- ══════════════════════════════════════════════════════ -->
-  <footer class="footer">
-    CropConnect Smart Irrigation System &nbsp;·&nbsp; Data refreshes every 10 seconds &nbsp;·&nbsp; 4 Nodes across 2
-    ESP8266 Masters
-  </footer>
-
   <script src="app.js"></script>
 </body>
-
 </html>
