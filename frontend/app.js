@@ -22,9 +22,11 @@ function setConnection(state, message) {
 function setSystemStatus(title, detail, mode = "") {
   byId("system-status-title").textContent = title;
   byId("system-status-detail").textContent = detail;
-  const strip = document.querySelector(".status-strip");
-  strip.classList.remove("status-live", "status-warn", "status-error");
-  if (mode) strip.classList.add("status-" + mode);
+  const strip = document.querySelector(".overview-bar");
+  if (strip) {
+    strip.classList.remove("status-live", "status-warn", "status-error");
+    if (mode) strip.classList.add("status-" + mode);
+  }
 }
 
 function formatTime(value) {
@@ -84,7 +86,12 @@ function renderNode(displayId, node) {
     : "Waiting for sensor data";
 
   const fill = byId("meter-" + displayId);
-  fill.style.width = valid ? Math.max(0, Math.min(100, current)) + "%" : "0%";
+  const percentage = valid ? Math.max(0, Math.min(100, current)) : 0;
+  fill.style.width = percentage + "%";
+  const gauge = card.querySelector(".gauge");
+  if (gauge) gauge.style.background = valid
+    ? "conic-gradient(#a9d28e 0 " + percentage + "%, #eaf0e5 " + percentage + "% 100%)"
+    : "conic-gradient(#eaf0e5 0 100%)";
   fill.classList.toggle("meter-low", valid && current < 30);
   fill.classList.toggle("meter-high", valid && current >= 70);
 
