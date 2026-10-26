@@ -55,7 +55,7 @@ function softwareAnalysis(current, ml) {
 
   const predicted = Number(ml.predictedMoisturePct);
   let note;
-  if (!Number.isFinite(Number(current))) {
+  if (current === null || current === undefined || !Number.isFinite(Number(current))) {
     note = "A prediction is available, but there is no current sensor reading to compare against.";
   } else {
     const difference = predicted - Number(current);
