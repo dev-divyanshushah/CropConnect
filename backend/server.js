@@ -3,9 +3,9 @@
 // ==============================================================
 //
 // WHAT THIS FILE DOES:
-//   1. Receives soil moisture from ESP8266 masters (POST /api/sensor-data)
-//   2. Validates incoming data - rejects bad/malformed readings
-//   3. Decides whether to irrigate (moisture + weather + override logic)
+//   1. Receives soil moisture from Master 1 (POST /api/sensor-data)
+//   2. Accepts only Sensor Nodes 1 and 2 for the current physical setup
+//   3. Produces software/ML analysis for display only; it never controls hardware
 //   4. Persists data to MongoDB (if configured) with graceful fallback
 //   5. Saves a JSON snapshot file every time valid data is processed
 //   6. Auto-commits & pushes the JSON snapshot to GitHub (throttled)
@@ -1470,7 +1470,8 @@ async function processAndSnapshot() {
 // ==============================================================
 
 // POST /api/sensor-data
-// ESP8266 masters call this to send moisture readings.
+// Master 1 forwards moisture readings from Sensor Nodes 1 and 2.
+// Software-only endpoint: no commands are sent back to hardware.
 // Body: { "master": 1, "node": 1, "moisture": 32 }
 app.post('/api/sensor-data', async (req, res) => {
   let { master, node, moisture } = req.body || {};
@@ -1479,16 +1480,12 @@ app.post('/api/sensor-data', async (req, res) => {
   moisture = Number(moisture);
 
   const errors = [];
-  if (isNaN(master) || master < 1 || master > 2)
-    errors.push('master must be 1 or 2');
-  if (isNaN(node) || node < 1 || node > 4)
-    errors.push('node must be 1, 2, 3, or 4');
-  if (isNaN(moisture) || moisture < 0 || moisture > 100)
+  if (!Number.isInteger(master) || master !== 1)
+    errors.push('master must be 1 for the current hardware setup');
+  if (!Number.isInteger(node) || (node !== 1 && node !== 2))
+    errors.push('node must be 1 or 2 for the current hardware setup');
+  if (!Number.isFinite(moisture) || moisture < 0 || moisture > 100)
     errors.push('moisture must be a number between 0 and 100');
-  if (!errors.length) {
-    if (master === 1 && node > 2) errors.push('Master 1 owns Nodes 1 and 2 only');
-    if (master === 2 && node < 3) errors.push('Master 2 owns Nodes 3 and 4 only');
-  }
 
   if (errors.length) {
     console.warn('REJECTED: Master=' + master + ' Node=' + node + ' - ' + errors.join('; '));
