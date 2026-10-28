@@ -89,7 +89,7 @@ h2 { margin: 5px 0 6px; font: 800 1.7rem 'Manrope', sans-serif; letter-spacing: 
 .section-heading p { margin: 0; color: #859083; font-size: .78rem; }
 .unit-label { display: inline-flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #dce5d7; border-radius: 9px; background: #fafbf7; color: #8b9787; font-size: .59rem; font-weight: 800; letter-spacing: .11em; }
 .unit-label b { color: #3c7848; font-size: .72rem; }
-.nodes-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 19px; }
+.nodes-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 19px; width: 100%; max-width: 900px; margin: 0 auto; }
 .sensor-card { position: relative; min-width: 0; overflow: hidden; padding: 23px 24px 0; border: 1px solid #e2e8de; border-radius: 20px; background: var(--paper); box-shadow: var(--shadow); transition: transform .2s ease, box-shadow .2s ease; }
 .sensor-card:hover { transform: translateY(-2px); box-shadow: 0 17px 38px rgba(32,59,39,.09); }
 .sensor-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #3f8850, #c4e68a); }
