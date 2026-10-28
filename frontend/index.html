@@ -29,19 +29,18 @@
       <div class="welcome-copy">
         <div class="eyebrow"><span class="eyebrow-mark">01</span> FIELD OVERVIEW <span class="eyebrow-rule"></span></div>
         <h1>Better data.<br /><span>Healthier growth.</span></h1>
-        <p>A clear view of your soil, powered by sensor readings and machine-learning insights.</p>
+        <p>A clear view of your soil, powered by live sensor readings and machine-learning insights.</p>
       </div>
       <aside class="network-card" aria-label="Sensor network structure">
         <div class="network-card-top"><span>YOUR NETWORK</span><span class="network-online"><i></i> 3 DEVICES</span></div>
         <div class="network-flow">
-          <div class="network-device master-device"><span class="device-icon">⌁</span><strong>Master 01</strong><small>Gateway</small></div>
+          <div class="network-device master-device"><span class="device-icon">⌁</span><strong>Master</strong><small>Gateway</small></div>
           <div class="network-branches"><span></span><span></span></div>
           <div class="network-sensors">
-            <div class="network-device"><span class="sensor-mini">01</span><strong>Sensor 01</strong></div>
-            <div class="network-device"><span class="sensor-mini">02</span><strong>Sensor 02</strong></div>
+            <div class="network-device"><span class="sensor-mini">N</span><strong>Node</strong></div>
           </div>
         </div>
-        <p class="network-footnote">One master · Two sensor nodes · Read-only monitoring</p>
+        <p class="network-footnote">One master · One sensor node · Read-only monitoring</p>
       </aside>
     </section>
 
@@ -54,15 +53,15 @@
     </section>
 
     <section class="section-heading">
-      <div><span class="section-kicker">LIVE TELEMETRY</span><h2>Soil moisture</h2><p>Real-time readings from your two connected sensor nodes.</p></div>
+      <div><span class="section-kicker">LIVE TELEMETRY</span><h2>Soil moisture</h2><p>Live readings from your connected sensor node.</p></div>
       <span class="unit-label">MOISTURE <b>%</b></span>
     </section>
 
-    <section class="nodes-grid" aria-label="Soil sensor readings">
+    <section class="nodes-grid" aria-label="Soil sensor reading">
       <article class="sensor-card" id="sensor-card-1">
         <div class="card-top">
-          <div class="node-icon node-icon-one"><span>01</span><i>↗</i></div>
-          <div class="node-title"><span class="node-label">SENSOR NODE 01</span><h3>Soil Sensor One</h3><p><span class="tiny-link-dot"></span> Connected through Master 1</p></div>
+          <div class="node-icon node-icon-one"><span>N</span><i>↗</i></div>
+          <div class="node-title"><span class="node-label">SENSOR NODE</span><h3>Soil Sensor</h3><p><span class="tiny-link-dot"></span> Connected through Master</p></div>
           <span class="state-badge state-waiting" id="state-badge-1">Waiting</span>
         </div>
         <div class="reading-panel">
@@ -79,25 +78,7 @@
         <footer class="card-footer"><span><span class="footer-dot"></span> LAST SENSOR UPDATE</span><strong id="updated-1">No data yet</strong></footer>
       </article>
 
-      <article class="sensor-card" id="sensor-card-2">
-        <div class="card-top">
-          <div class="node-icon node-icon-two"><span>02</span><i>↗</i></div>
-          <div class="node-title"><span class="node-label">SENSOR NODE 02</span><h3>Soil Sensor Two</h3><p><span class="tiny-link-dot"></span> Connected through Master 1</p></div>
-          <span class="state-badge state-waiting" id="state-badge-2">Waiting</span>
-        </div>
-        <div class="reading-panel">
-          <div class="reading-head"><div><span class="reading-label">Current soil moisture</span><div class="reading-number"><span id="moisture-2">—</span><small>%</small></div></div><div class="gauge" aria-hidden="true"><div class="gauge-inner"><span>LIVE</span><b>DATA</b></div></div></div>
-          <div class="reading-caption" id="reading-caption-2">Waiting for sensor data</div>
-          <div class="meter"><div class="meter-fill" id="meter-2"></div></div>
-          <div class="meter-labels"><span><i class="dry-dot"></i> 0% · Dry</span><span>100% · Wet <i class="wet-dot"></i></span></div>
-        </div>
-        <div class="analysis-panel">
-          <div class="analysis-heading"><span class="analysis-symbol">✳</span><span>MODEL INSIGHT</span><span class="analysis-tag">PREDICTION</span></div>
-          <div class="analysis-row"><span>Predicted moisture</span><strong id="prediction-2">Not available</strong></div>
-          <p class="analysis-note" id="analysis-2">A model insight will appear when a prediction is available.</p>
-        </div>
-        <footer class="card-footer"><span><span class="footer-dot"></span> LAST SENSOR UPDATE</span><strong id="updated-2">No data yet</strong></footer>
-      </article>
+
     </section>
 
     <section class="insight-footer">
