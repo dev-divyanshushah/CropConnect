@@ -55,10 +55,10 @@ h1 span { color: var(--green); }
 .network-device strong { font-size: .7rem; white-space: nowrap; }
 .network-device small { display: block; margin-top: 3px; color: #94a091; font-size: .6rem; }
 .device-icon { display: grid; place-items: center; width: 31px; height: 31px; flex: 0 0 auto; border-radius: 9px; background: #e5f1df; color: #2f7848; font-size: 1.25rem; }
-.network-branches { position: relative; height: 73px; }
-.network-branches::before { content: ''; position: absolute; left: 0; top: 50%; width: 15px; border-top: 1px solid #b7ceb2; }
-.network-branches::after { content: ''; position: absolute; left: 14px; top: 18%; bottom: 18%; border-left: 1px solid #b7ceb2; }
-.network-branches span { position: absolute; left: 14px; width: 14px; border-top: 1px solid #b7ceb2; }
+.network-branches { position: relative; height: 42px; }
+.network-branches::before { content: ''; position: absolute; left: 0; top: 50%; width: 28px; border-top: 1px solid #b7ceb2; }
+.network-branches::after { display: none; }
+.network-branches span { display: none; }
 .network-branches span:first-child { top: 18%; }
 .network-branches span:last-child { bottom: 18%; }
 .network-sensors { display: grid; gap: 9px; }
