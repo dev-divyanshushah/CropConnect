@@ -1,12 +1,11 @@
 // CropConnect — software-only sensor dashboard
-// Displays two sensor nodes and ML analysis. No actuator commands are sent.
+// Displays the selected sensor node and ML analysis. No actuator commands are sent.
 const BACKEND_URL = "https://cropconnect-backend-p0bo.onrender.com";
 const REFRESH_INTERVAL_MS = 10000;
 
-// Canonical physical setup: Master 1 forwards Sensor Nodes 1 and 2.
+// Show only the working physical sensor: backend Node 2, labelled simply 'Node' on the website.
 const DISPLAY_NODES = [
-  { display: 1, backendId: 1 },
-  { display: 2, backendId: 2 },
+  { display: 1, backendId: 2 },
 ];
 
 const byId = (id) => document.getElementById(id);
@@ -132,7 +131,7 @@ async function refreshDashboard() {
       setConnection("connected", "Backend connected");
       setSystemStatus(
         hasReading ? "Sensor data received" : "Connected — waiting for sensor readings",
-        hasReading ? "Latest readings and available software analysis are shown below." : "The server is reachable, but no valid readings are available for the two displayed nodes.",
+        hasReading ? "Latest readings and available software analysis are shown below." : "The server is reachable, but no valid readings are available for the displayed node.",
         hasReading ? "live" : "warn"
       );
     } else if (mode === "LAST_KNOWN") {
